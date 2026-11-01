@@ -584,6 +584,88 @@ class VotePartyCog(commands.Cog):
         except:
             pass
     
+    @discord.app_commands.command(name="party", description="Show the current vote party status")
+    async def party(self, interaction: discord.Interaction):
+        """Show current vote party status"""
+        embed = self.bot._build_vote_embed() if hasattr(self.bot, "_build_vote_embed") else None
+        if embed is None:
+            embed = discord.Embed(
+                title=f"🗳️ {BOT_NAME} — Vote Party",
+                description=(
+                    f"**Remaining votes:** {self.bot.remaining}/{VOTE_GOAL}\n"
+                    f"**Last updated:** {self.bot.last_updated or 'Never'}"
+                ),
+                color=0x00C853,
+            )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.app_commands.command(name="parties", description="List recent vote parties")
+    async def parties(self, interaction: discord.Interaction):
+        """List recent completed vote parties"""
+        lang = self.bot.player_data.get_lang(interaction.user.id) if hasattr(self.bot, "player_data") else "en"
+        history = getattr(self.bot, "vote_history", []) or []
+        completed = [h for h in history if isinstance(h, dict)]
+
+        if not completed:
+            await interaction.response.send_message(
+                "ℹ️ No vote party history yet. The first one will show up here once complete!",
+                ephemeral=True,
+            )
+            return
+
+        lines = []
+        for entry in completed[-10:][::-1]:
+            when = entry.get("time") or entry.get("completed_at") or entry.get("date") or "?"
+            total = entry.get("total") or entry.get("votes") or "?"
+            lines.append(f"• **{when}** — {total} votes")
+
+        embed = discord.Embed(
+            title="📜 Recent Vote Parties",
+            description="\n".join(lines),
+            color=0x00C853,
+        )
+        if self.bot.last_vote_party_time:
+            embed.set_footer(text=f"Last VP: {self.bot.last_vote_party_time}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.app_commands.command(name="info", description="View your vote stats and linked account")
+    async def info(self, interaction: discord.Interaction):
+        """View personal vote info"""
+        user_id = interaction.user.id
+        ign = self.bot.player_igns.get(user_id)
+        votes = self.bot.player_votes.get(user_id, 0)
+        streak = self.bot.player_streaks.get(user_id, 0)
+
+        embed = discord.Embed(
+            title=f"📋 Info for {interaction.user.display_name}",
+            color=0xF1C40F,
+        )
+        embed.add_field(name="Linked IGN", value=ign or "❌ Not linked — use `/link <ign>`", inline=False)
+        embed.add_field(name="Votes this cycle", value=f"{votes}/{MAX_VOTES_PER_CYCLE}", inline=True)
+        embed.add_field(name="Streak", value=f"🔥 {streak}", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.app_commands.command(name="leave", description="Reset your vote-party progress for this cycle")
+    async def leave(self, interaction: discord.Interaction):
+        """Leave the current vote party cycle (resets claims/streak)"""
+        user_id = interaction.user.id
+        if user_id not in self.bot.player_votes:
+            await interaction.response.send_message(
+                "ℹ️ You don't have any vote-party progress this cycle.",
+                ephemeral=True,
+            )
+            return
+
+        self.bot.player_votes.pop(user_id, None)
+        self.bot.player_cooldowns.pop(user_id, None)
+        self.bot.player_streaks.pop(user_id, None)
+        self.bot._save_vote_state()
+
+        await interaction.response.send_message(
+            "✅ You've left the current vote party. Your progress was reset.",
+            ephemeral=True,
+        )
+
     @discord.app_commands.command(name="link", description="Link your Minecraft username")
     @discord.app_commands.describe(ign="Your Minecraft in-game name")
     async def link(self, interaction: discord.Interaction, ign: str):
