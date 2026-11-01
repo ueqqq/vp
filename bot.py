@@ -602,7 +602,7 @@ class VotePartyCog(commands.Cog):
     @discord.app_commands.command(name="parties", description="List recent vote parties")
     async def parties(self, interaction: discord.Interaction):
         """List recent completed vote parties"""
-        lang = self.bot.player_data.get_lang(interaction.user.id) if hasattr(self.bot, "player_data") else "en"
+        lang = "en"  # TODO: i18n user preference
         history = getattr(self.bot, "vote_history", []) or []
         completed = [h for h in history if isinstance(h, dict)]
 
