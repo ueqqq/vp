@@ -79,6 +79,13 @@ class NariñoBot(commands.Bot):
         """Called when bot is starting up"""
         await self.scraper.start()
         await self.load_cogs()
+        # Sync to each guild we're in for instant availability, plus globally as fallback
+        for guild in self.guilds:
+            try:
+                synced = await self.tree.copy_global_to(guild=guild).sync()
+                logger.info(f"Synced {len(synced)} commands to guild '{guild.name}' (id={guild.id}).")
+            except Exception as e:
+                logger.warning(f"Guild sync failed for {guild}: {e}")
         await self.tree.sync()
         logger.info("Slash commands synced globally.")
     
