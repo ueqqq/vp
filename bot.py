@@ -79,15 +79,30 @@ class NariñoBot(commands.Bot):
         """Called when bot is starting up"""
         await self.scraper.start()
         await self.load_cogs()
-        # Sync to each guild we're in for instant availability, plus globally as fallback
+        # Register every command explicitly per-guild (no reliance on global cache)
+        import discord as _d
+        cmds = [c for c in self.tree.get_commands()] if self.tree.get_commands() else None
+        self._all_cmds = None  # populated after first ready via on_ready sync
+
+    async def _full_sync(self):
+        """Force-sync all registered commands into every guild the bot is in."""
+        try:
+            await self.wait_until_ready(timeout=60)
+        except Exception:
+            pass
+        total = len(self.tree.get_commands())
+        logger.info(f"Tree has {total} global commands registered.")
         for guild in self.guilds:
             try:
                 synced = await self.tree.copy_global_to(guild=guild).sync()
                 logger.info(f"Synced {len(synced)} commands to guild '{guild.name}' (id={guild.id}).")
             except Exception as e:
                 logger.warning(f"Guild sync failed for {guild}: {e}")
-        await self.tree.sync()
-        logger.info("Slash commands synced globally.")
+        try:
+            g = await self.tree.sync()
+            logger.info(f"Global sync done: {len(g)} commands.")
+        except Exception as e:
+            logger.warning(f"Global sync failed: {e}")
     
     async def load_cogs(self):
         """Load all cogs"""
@@ -125,6 +140,9 @@ class NariñoBot(commands.Bot):
         logger.info(f"✓ Logged in as {self.user} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         logger.info(f"✓ {BOT_NAME} v{BOT_VERSION} is ready!")
+        
+        # Force-sync slash commands now that guilds are available
+        self.loop.create_task(self._full_sync())
         
         # Restore vote party state
         await self._restore_vote_state()
