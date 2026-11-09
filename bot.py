@@ -87,9 +87,13 @@ class NariñoBot(commands.Bot):
     async def _full_sync(self):
         """Force-sync all registered commands into every guild the bot is in."""
         try:
-            await self.wait_until_ready(timeout=60)
+            await self.wait_until_ready(timeout=120)
         except Exception:
             pass
+        # Safety net: if we never saw any guilds, retry once after 60s
+        if not self.guilds:
+            logger.warning("No guilds visible yet; retrying sync in 60s. Check bot is invited with 'applications.commands' scope.")
+            await asyncio.sleep(60)
         total = len(self.tree.get_commands())
         logger.info(f"Tree has {total} global commands registered.")
         for guild in self.guilds:
