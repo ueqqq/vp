@@ -17,8 +17,10 @@ from config import (
     VOTE_GOAL, SCRAPE_INTERVAL_SECONDS, PING_THRESHOLD,
     PING_DELETE_SECONDS, MAX_VOTES_PER_CYCLE,
     NATION_MEMBER_ROLE, ALLY_ROLE, VP_ROLE, VERIFIED_ROLE,
+    STAFF_ROLE, LEADERSHIP_ROLE,
     TICKET_CATEGORY_NAME, TICKET_STAFF_ROLE,
     COLOR_GOLD, COLOR_BLUE, COLOR_RED,
+    VOTE_SITES, REMINDER_COOLDOWN,
     # DiplomaticaMC specific
     STARTING_GOLD, VOTE_REWARD_GOLD, DAILY_REWARD_GOLD, WORK_REWARD_GOLD,
     TOWN_CREATION_COST, NATION_CREATION_COST, TOWN_CLAIM_COST,
@@ -71,9 +73,12 @@ class NariñoBot(commands.Bot):
         
         # Player data
         self.player_votes = {}  # user_id -> votes_this_cycle
-        self.player_cooldowns = {}  # user_id -> last_claim_time
+        self.player_cooldowns = {}  # user_id -> last_claim_time (timestamp)
         self.player_streaks = {}  # user_id -> streak_count
         self.player_igns = {}  # user_id -> minecraft_ign
+
+        # Vote reminders: user_id -> timestamp when reminder was set
+        self.player_reminders = {}
     
     async def setup_hook(self):
         """Called when bot is starting up"""
@@ -176,6 +181,7 @@ class NariñoBot(commands.Bot):
         self.player_cooldowns = data_manager.get("player_data", "cooldowns", {})
         self.player_streaks = data_manager.get("player_data", "streaks", {})
         self.player_igns = data_manager.get("player_data", "igns", {})
+        self.player_reminders = data_manager.get("player_data", "reminders", {})
         
         # Restore tracker message
         msg_id = data_manager.get("vote_state", "message_id")
@@ -209,9 +215,57 @@ class NariñoBot(commands.Bot):
     
     @tasks.loop(minutes=1)
     async def reminder_loop(self):
-        """Check and send reminders"""
-        # TODO: Implement reminder system
-        pass
+        """Send DM reminders to players who asked to be reminded.
+
+        Players set a reminder via the \"⏰ Remind Me\" button on the vote
+        tracker. After REMINDER_COOLDOWN seconds (30 min), if the vote party
+        is still in progress, they get a friendly DM nudging them to vote.
+        """
+        now = datetime.now(timezone.utc).timestamp()
+        due_users = [
+            uid for uid, ts in list(self.player_reminders.items())
+            if now - ts >= REMINDER_COOLDOWN
+        ]
+
+        if not due_users:
+            return
+
+        # Party already finished - clear all pending reminders instead of spamming
+        if self.remaining <= 0:
+            self.player_reminders.clear()
+            self._save_vote_state()
+            return
+
+        for user_id in due_users:
+            # Reset timer so the next reminder fires after another cooldown
+            self.player_reminders[user_id] = now
+            try:
+                user = self.get_user(user_id) or await self.fetch_user(user_id)
+                if user.bot:
+                    continue
+                lang = i18n.get_user_lang(user_id)
+                if lang == "es":
+                    message = (
+                        f"🔔 **¡Recordatorio!** ¡La Fiesta de Votos de Colombia sigue!\n"
+                        f"{self.remaining} votos restantes. ¡Ven a votar ahora!\n\n"
+                    )
+                else:
+                    message = (
+                        f"🔔 **Reminder!** The Colombia Vote Party is still going!\n"
+                        f"{self.remaining} votes remaining. Come vote now!\n\n"
+                    )
+                for site in VOTE_SITES:
+                    message += f"• [{site['name']}]({site['url']})\n"
+                message += "\n*Responde este mensaje o usa el botón «⏰ Remind Me» para pausar los recordatorios.*" if lang == "es" else \
+                           "\n*Reply to this message or use the \"⏰ Remind Me\" button to pause reminders.*"
+                await user.send(message)
+            except discord.Forbidden:
+                # DMs closed - stop reminding this user
+                self.player_reminders.pop(user_id, None)
+            except Exception as e:
+                logger.warning(f"Failed to send reminder to {user_id}: {e}")
+
+        self._save_vote_state()
     
     # ─── Vote Party Logic ─────────────────────────────────────────────────────
     
@@ -342,6 +396,7 @@ class NariñoBot(commands.Bot):
         data_manager.set("player_data", "cooldowns", self.player_cooldowns)
         data_manager.set("player_data", "streaks", self.player_streaks)
         data_manager.set("player_data", "igns", self.player_igns)
+        data_manager.set("player_data", "reminders", self.player_reminders)
     
     async def _update_embed(self):
         """Update the tracker embed"""
@@ -413,12 +468,12 @@ class NariñoBot(commands.Bot):
         embed.description += "\n\n━━━━━━━━━━━━━━━━━━━━\n"
         embed.description += "🗳️ **Vote Counts**\n"
         
-        # Site votes
-        site_emojis = ["🟡", "🔵", "🔴"]
+        # Site votes (use each site's configured emoji, fall back to color squares)
+        fallback_emojis = ["🟡", "🔵", "🔴"]
         for i, site in enumerate(VOTE_SITES):
             name = site["name"]
             count = self.site_counts.get(name)
-            emoji = site_emojis[i % len(site_emojis)]
+            emoji = site.get("emoji", fallback_emojis[i % len(fallback_emojis)])
             
             if count is not None:
                 contribution = None
@@ -514,6 +569,36 @@ class VotePartyCog(commands.Cog):
             await self._handle_vote_claim(interaction)
         elif custom_id == "vote_notify_toggle":
             await self._handle_notify_toggle(interaction)
+        elif custom_id == "vote_remind_button":
+            await self._handle_remind_me(interaction)
+
+    async def _handle_remind_me(self, interaction: discord.Interaction):
+        """Handle the '⏰ Remind Me' button - DM a reminder in 30 minutes."""
+        user_id = interaction.user.id
+        now = datetime.now(timezone.utc).timestamp()
+
+        existing = self.bot.player_reminders.get(user_id)
+        if existing is not None:
+            elapsed = now - existing
+            remaining_cooldown = REMINDER_COOLDOWN - elapsed
+            if remaining_cooldown > 0:
+                mins = int(remaining_cooldown // 60)
+                await interaction.response.send_message(
+                    f"⏳ You already have a reminder set. Try again in **{mins}m**.",
+                    ephemeral=True
+                )
+                return
+
+        self.bot.player_reminders[user_id] = now
+        self.bot._save_vote_state()
+
+        lang = i18n.get_user_lang(user_id)
+        msg = (
+            "⏰ I'll remind you in **30 minutes** to vote!"
+            if lang != "es" else
+            "⏰ ¡Te recordaré en **30 minutos** para votar!"
+        )
+        await interaction.response.send_message(msg, ephemeral=True)
     
     async def _handle_vote_claim(self, interaction: discord.Interaction):
         """Handle vote claim button"""
@@ -551,10 +636,18 @@ class VotePartyCog(commands.Cog):
         # Claim the vote
         self.bot.player_votes[user_id] = votes_this_cycle + 1
         self.bot.player_cooldowns[user_id] = now
-        
-        # Update streak
-        self.bot.player_streaks[user_id] = self.bot.player_streaks.get(user_id, 0) + 1
-        
+
+        # Update streak (consecutive claims within 24h keep it alive)
+        last_claim_date = datetime.fromtimestamp(last_claim, tz=timezone.utc).date() if last_claim else None
+        claim_date = datetime.fromtimestamp(now, tz=timezone.utc).date()
+        if last_claim_date and (claim_date - last_claim_date).days > 1:
+            self.bot.player_streaks[user_id] = 1  # gap of >1 day resets streak
+        else:
+            self.bot.player_streaks[user_id] = self.bot.player_streaks.get(user_id, 0) + 1
+
+        # Voting clears any pending reminder for this cycle
+        self.bot.player_reminders.pop(user_id, None)
+
         self.bot._save_vote_state()
         
         # Send confirmation
@@ -1184,9 +1277,10 @@ class DiplomacyCog(commands.Cog):
         
         # Send to leadership
         leadership = discord.utils.get(interaction.guild.text_channels, name="leadership")
+        lead_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
         if leadership:
             await leadership.send(
-                content="🤝 **New Alliance Proposal** <@&LEADERSHIP_ROLE_ID>",
+                content=f"🤝 **New Alliance Proposal** {lead_role.mention if lead_role else ''}",
                 embed=proposal_embed,
                 view=view
             )
@@ -2090,6 +2184,16 @@ class VoteNotifyView(discord.ui.View):
     )
     async def notify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Notify toggle button - handled by cog"""
+        pass
+
+    @discord.ui.button(
+        label="⏰ Remind Me",
+        style=discord.ButtonStyle.secondary,
+        custom_id="vote_remind_button",
+        row=1
+    )
+    async def remind_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Remind-me button - handled by cog"""
         pass
 
 class WelcomeOnboardingView(discord.ui.View):
