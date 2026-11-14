@@ -364,7 +364,19 @@ class CastroBot(commands.Bot):
     async def _perform_scrape_and_update(self):
         """Scrape all sites and update the embed"""
         try:
-            counts, total = await self.scraper.scrape_all()
+                        counts, total = await self.scraper.scrape_all()
+
+            for name, count in list(counts.items()):
+                if count is None and name in self.scraper.last_successful_counts:
+                    counts[name] = self.scraper.last_successful_counts[name]
+                elif count is None and name in self.site_counts and self.site_counts[name] is not None:
+                    counts[name] = self.site_counts[name]
+
+            total = sum(v for v in counts.values() if v is not None)
+
+            if total == 0:
+                logger.warning("All sites failed - keeping previous data")
+                return
             
             # Validate we got data
             successful_sites = sum(1 for v in counts.values() if v is not None)
