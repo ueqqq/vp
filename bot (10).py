@@ -1,0 +1,3127 @@
+"""Castro — Cuban nation community bot."""
+
+import os
+import re
+import time
+import hashlib
+import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+import discord
+from discord.ext import commands, tasks
+
+from config import (
+    BOT_NAME, BOT_VERSION, BOT_COLOR, NATION_NAME, NATION_FLAG,
+    VOTE_GOAL, SCRAPE_INTERVAL_SECONDS, PING_THRESHOLD,
+    PING_DELETE_SECONDS, MAX_VOTES_PER_CYCLE,
+    NATION_MEMBER_ROLE, ALLY_ROLE, VP_ROLE, VERIFIED_ROLE,
+    STAFF_ROLE, LEADERSHIP_ROLE,
+    TICKET_CATEGORY_NAME, TICKET_STAFF_ROLE,
+    COLOR_GOLD, COLOR_BLUE, COLOR_RED, COLOR_TURQUOISE,
+    VOTE_SITES, REMINDER_COOLDOWN,
+    # DiplomaticaMC specific
+    INACTIVITY_WARNING_DAYS, INACTIVITY_DELETION_DAYS
+)
+from core.i18n import i18n
+from core.data_manager import data_manager
+from vote.scraper import AdvancedVoteScraper
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(BOT_NAME)
+
+
+def _build_fingerprint() -> str:
+    """Short hash of the running bot.py, so a deploy can be verified from the log"""
+    try:
+        with open(__file__, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except OSError:
+        return "unknown"
+
+class CastroBot(commands.Bot):
+    """Discord bot for the Cuban nation community."""
+    
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True
+        intents.reactions = True
+        
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            help_command=None,
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name=f"over {NATION_NAME} {NATION_FLAG}"
+            )
+        )
+        
+        # Core systems
+        self.scraper = AdvancedVoteScraper()
+        self.vote_history = []
+        self.tracker_message = None
+        
+        # Vote party state
+        self.baseline = 0
+        self.remaining = VOTE_GOAL
+        self.site_counts = {}
+        self.last_updated = None
+        self.has_ping_sent = False
+        self.ping_message_id = None
+        self.ping_timestamp = None
+        self.cycle_start_votes = {}
+        self.cycle_start_time = None
+        self.last_vote_party_time = None
+        
+        # Player data
+        self.player_votes = {}  # user_id -> votes_this_cycle
+        self.player_cooldowns = {}  # user_id -> last_claim_time (timestamp)
+        self.player_streaks = {}  # user_id -> streak_count
+        self.player_igns = {}  # user_id -> minecraft_ign
+
+        # Vote reminders: user_id -> timestamp when reminder was set
+        self.player_reminders = {}
+    
+    async def setup_hook(self):
+        """Called when bot is starting up"""
+        await self.scraper.start()
+        await self.load_cogs()
+        # Friendly replies for permission failures instead of unhandled tracebacks
+        self.tree.on_error = self._on_tree_error
+
+        # Register every command explicitly per-guild (no reliance on global cache)
+        import discord as _d
+        cmds = [c for c in self.tree.get_commands()] if self.tree.get_commands() else None
+        self._all_cmds = None  # populated after first ready via on_ready sync
+
+    async def _on_tree_error(self, interaction: discord.Interaction, error: Exception):
+        """Turn app-command check failures into a readable ephemeral reply"""
+        if isinstance(error, discord.app_commands.MissingRole):
+            text = f"❌ You need the **{error.missing_role}** role to use this command."
+        elif isinstance(error, discord.app_commands.MissingPermissions):
+            text = "❌ You need **Administrator** permission to use this command."
+        elif isinstance(error, discord.app_commands.CheckFailure):
+            text = "❌ You don't have permission to use this command."
+        else:
+            logger.error(f"Command '{getattr(interaction.command, 'name', '?')}' failed: {error}", exc_info=error)
+            text = "❌ Something went wrong running that command."
+
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(text, ephemeral=True)
+            else:
+                await interaction.response.send_message(text, ephemeral=True)
+        except Exception as e:
+            logger.warning(f"Could not report command error: {e}")
+
+    async def _full_sync(self):
+        """Force-sync all registered commands into every guild the bot is in."""
+        try:
+            await self.wait_until_ready(timeout=120)
+        except Exception:
+            pass
+        # Safety net: if we never saw any guilds, retry once after 60s
+        if not self.guilds:
+            logger.warning("No guilds visible yet; retrying sync in 60s. Check bot is invited with 'applications.commands' scope.")
+            await asyncio.sleep(60)
+        total = len(self.tree.get_commands())
+        logger.info(f"Tree has {total} global commands registered.")
+        for guild in self.guilds:
+            try:
+                self.tree.copy_global_to(guild=guild)
+                synced = await self.tree.sync(guild=guild)
+                logger.info(f"Synced {len(synced)} commands to guild '{guild.name}' (id={guild.id}).")
+            except Exception as e:
+                logger.warning(f"Guild sync failed for {guild}: {e}")
+        try:
+            g = await self.tree.sync()
+            logger.info(f"Global sync done: {len(g)} commands.")
+        except Exception as e:
+            logger.warning(f"Global sync failed: {e}")
+    
+    async def load_cogs(self):
+        """Load all cogs"""
+        # Vote party cog
+        await self.add_cog(VotePartyCog(self))
+        
+        # Nation features cog
+        await self.add_cog(NationCog(self))
+        
+        # Welcome cog
+        await self.add_cog(WelcomeCog(self))
+        
+        # Diplomacy cog
+        await self.add_cog(DiplomacyCog(self))
+        
+        # Towny cog (DiplomaticaMC integration)
+        await self.add_cog(TownyCog(self))
+        
+        # SiegeWar cog
+        await self.add_cog(SiegeWarCog(self))
+        
+        # Inactivity cog
+        await self.add_cog(InactivityCog(self))
+        
+        # Mention handler
+        await self.add_cog(MentionCog(self))
+        
+        # Fun cog
+        await self.add_cog(FunCog(self))
+        
+        # Ticket cog
+        await self.add_cog(TicketCog(self))
+        
+        logger.info("All cogs loaded successfully.")
+    
+    async def on_ready(self):
+        """Called when bot is fully connected"""
+        logger.info(f"✓ Logged in as {self.user} (ID: {self.user.id})")
+        logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
+        logger.info(f"✓ {BOT_NAME} v{BOT_VERSION} is ready!")
+        logger.info(f"✓ Running build {_build_fingerprint()} from {os.path.abspath(__file__)}")
+        
+        # Force-sync slash commands now that guilds are available
+        self.loop.create_task(self._full_sync())
+        
+        # Restore vote party state
+        await self._restore_vote_state()
+
+        # Adopt or post the tracker message so the embed keeps updating
+        await self._ensure_tracker()
+        
+        # Start periodic tasks
+        if not self.scrape_loop.is_running():
+            self.scrape_loop.start()
+            logger.info(f"✓ Scrape loop started (every {SCRAPE_INTERVAL_SECONDS} sec)")
+        
+        if not self.reminder_loop.is_running():
+            self.reminder_loop.start()
+            logger.info("✓ Reminder loop started")
+    
+    async def _restore_vote_state(self):
+        """Restore vote party state from data"""
+        self.baseline = data_manager.get("vote_state", "baseline", 0)
+        self.remaining = data_manager.get("vote_state", "remaining", VOTE_GOAL)
+        self.site_counts = data_manager.get("vote_state", "site_counts", {})
+        self.last_updated = data_manager.get("vote_state", "last_updated")
+        self.has_ping_sent = data_manager.get("vote_state", "has_ping_sent", False)
+        self.cycle_start_votes = data_manager.get("vote_state", "cycle_start_votes", {})
+        self.cycle_start_time = data_manager.get("vote_state", "cycle_start_time")
+        self.last_vote_party_time = data_manager.get("vote_state", "last_vote_party_time")
+        
+        # Restore player data
+        self.player_votes = data_manager.get("player_data", "votes", {})
+        self.player_cooldowns = data_manager.get("player_data", "cooldowns", {})
+        self.player_streaks = data_manager.get("player_data", "streaks", {})
+        self.player_igns = data_manager.get("player_data", "igns", {})
+        self.player_reminders = data_manager.get("player_data", "reminders", {})
+        
+        # Restore tracker message
+        msg_id = data_manager.get("vote_state", "message_id")
+        ch_id = data_manager.get("vote_state", "channel_id")
+        
+        if msg_id and ch_id:
+            try:
+                channel = self.get_channel(ch_id) or await self.fetch_channel(ch_id)
+                if channel:
+                    self.tracker_message = await channel.fetch_message(msg_id)
+                    logger.info(f"✓ Restored tracker message {msg_id}")
+            except Exception as e:
+                logger.warning(f"Could not restore tracker message: {e}")
+    
+    async def _ensure_tracker(self):
+        """Adopt the existing tracker message, or post one if there is none"""
+        if self.tracker_message and hasattr(self.tracker_message, "edit"):
+            return
+        self.tracker_message = None
+
+        channel = None
+        saved_id = data_manager.get("vote_state", "channel_id")
+        if saved_id:
+            channel = self.get_channel(saved_id)
+
+        if channel is None:
+            # Match loosely: real channels are often named "🗳️-vote-party"
+            for guild in self.guilds:
+                for candidate in guild.text_channels:
+                    if "vote" in candidate.name.lower() and "party" in candidate.name.lower():
+                        channel = candidate
+                        break
+                if channel:
+                    break
+
+        if channel is None:
+            logger.warning("No vote tracker channel found - use /voteparty setup to post one")
+            return
+
+        # Reuse an existing tracker message rather than posting duplicates
+        try:
+            async for msg in channel.history(limit=50):
+                if msg.author.id != self.user.id or not msg.embeds:
+                    continue
+                title = msg.embeds[0].title or ""
+                if "Vote Party" in title:
+                    self.tracker_message = msg
+                    data_manager.set("vote_state", "message_id", msg.id)
+                    data_manager.set("vote_state", "channel_id", channel.id)
+                    logger.info(f"Adopted existing tracker message {msg.id} in #{channel.name}")
+                    return
+        except Exception as e:
+            logger.warning(f"Could not scan #{channel.name} for a tracker: {e}")
+
+        try:
+            message = await channel.send(embed=self._build_vote_embed(), view=VoteNotifyView(self))
+        except Exception as e:
+            logger.warning(f"Could not post the vote tracker: {e}")
+            return
+
+        self.tracker_message = message
+        data_manager.set("vote_state", "message_id", message.id)
+        data_manager.set("vote_state", "channel_id", channel.id)
+        logger.info(f"Posted vote tracker message {message.id} in #{channel.name}")
+
+    async def close(self):
+        """Cleanup on shutdown"""
+        self.scrape_loop.cancel()
+        self.reminder_loop.cancel()
+        await self.scraper.close()
+        await data_manager.save_all()
+        await super().close()
+    
+    # ─── Periodic Tasks ───────────────────────────────────────────────────────
+    
+    @tasks.loop(seconds=SCRAPE_INTERVAL_SECONDS)
+    async def scrape_loop(self):
+        """Periodic vote scraping"""
+        logger.info("Running scheduled scrape...")
+        await self._perform_scrape_and_update()
+        await self._cleanup_old_ping()
+    
+    @tasks.loop(minutes=1)
+    async def reminder_loop(self):
+        """Send DM reminders to players who asked to be reminded.
+
+        Players set a reminder via the \"⏰ Remind Me\" button on the vote
+        tracker. After REMINDER_COOLDOWN seconds (30 min), if the vote party
+        is still in progress, they get a friendly DM nudging them to vote.
+        """
+        now = datetime.now(timezone.utc).timestamp()
+        due_users = [
+            uid for uid, ts in list(self.player_reminders.items())
+            if now - ts >= REMINDER_COOLDOWN
+        ]
+
+        if not due_users:
+            return
+
+        # Party already finished - clear all pending reminders instead of spamming
+        if self.remaining <= 0:
+            self.player_reminders.clear()
+            self._save_vote_state()
+            return
+
+        for user_id in due_users:
+            # Reset timer so the next reminder fires after another cooldown
+            self.player_reminders[user_id] = now
+            try:
+                user = self.get_user(user_id) or await self.fetch_user(user_id)
+                if user.bot:
+                    continue
+                lang = i18n.get_user_lang(user_id)
+                if lang == "es":
+                    message = (
+                        f"🔔 **¡Recordatorio!** ¡La Fiesta de Votos de {NATION_NAME} sigue!\n"
+                        f"{self.remaining} votos restantes. ¡Ven a votar ahora!\n\n"
+                    )
+                else:
+                    message = (
+                        f"🔔 **Reminder!** The {NATION_NAME} Vote Party is still going!\n"
+                        f"{self.remaining} votes remaining. Come vote now!\n\n"
+                    )
+                for site in VOTE_SITES:
+                    message += f"• [{site['name']}]({site['url']})\n"
+                message += "\n*Responde este mensaje o usa el botón «⏰ Remind Me» para pausar los recordatorios.*" if lang == "es" else \
+                           "\n*Reply to this message or use the \"⏰ Remind Me\" button to pause reminders.*"
+                await user.send(message)
+            except discord.Forbidden:
+                # DMs closed - stop reminding this user
+                self.player_reminders.pop(user_id, None)
+            except Exception as e:
+                logger.warning(f"Failed to send reminder to {user_id}: {e}")
+
+        self._save_vote_state()
+    
+    # ─── Vote Party Logic ─────────────────────────────────────────────────────
+    
+    async def _perform_scrape_and_update(self):
+        """Scrape all sites and update the embed"""
+        try:
+            counts, total = await self.scraper.scrape_all()
+
+            for name, count in list(counts.items()):
+                if count is None and name in self.scraper.last_successful_counts:
+                    counts[name] = self.scraper.last_successful_counts[name]
+                elif count is None and name in self.site_counts and self.site_counts[name] is not None:
+                    counts[name] = self.site_counts[name]
+
+            total = sum(v for v in counts.values() if v is not None)
+
+            if total == 0:
+                logger.warning("All sites failed - keeping previous data")
+                return
+            
+            # Validate we got data
+            successful_sites = sum(1 for v in counts.values() if v is not None)
+            total_sites = len(counts)
+            
+            if successful_sites == 0:
+                logger.warning("⚠️ All sites failed - keeping previous data")
+                return
+            
+            if successful_sites < total_sites:
+                logger.warning(f"⚠️ Only {successful_sites}/{total_sites} sites returned data")
+                for site_name, count in counts.items():
+                    if count is None and site_name in self.scraper.last_successful_counts:
+                        counts[site_name] = self.scraper.last_successful_counts[site_name]
+                
+                total = sum(v for v in counts.values() if v is not None)
+            
+            baseline = self.baseline
+            
+            # First run - set baseline
+            if baseline == 0 and self.last_updated is None:
+                logger.info(f"🔧 First run - setting baseline to {total}")
+                baseline = total
+                self.baseline = baseline
+                data_manager.set("vote_state", "baseline", baseline)
+            
+            remaining = VOTE_GOAL - (total - baseline)
+            
+            # Sanity check
+            if remaining < 0 or remaining > VOTE_GOAL * 2:
+                logger.error(f"❌ Invalid remaining value: {remaining}")
+                baseline = total
+                self.baseline = baseline
+                remaining = VOTE_GOAL
+                data_manager.set("vote_state", "baseline", baseline)
+            
+            # Check if vote party is complete
+            if remaining <= 0:
+                logger.info(f"🎉 Vote party complete! Total: {total}")
+                await self._handle_vote_party_complete(total)
+            
+            # Update state
+            now = datetime.now(timezone.utc)
+            self.remaining = max(0, remaining)
+            self.site_counts = counts
+            self.last_updated = now.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Add to history
+            self.vote_history.append({
+                "timestamp": now.timestamp(),
+                "total": total,
+                "counts": counts
+            })
+            if len(self.vote_history) > 100:
+                self.vote_history = self.vote_history[-100:]
+            
+            # Save state
+            self._save_vote_state()
+            
+            # Update embed
+            await self._update_embed()
+            
+            # Check ping
+            await self._check_ping()
+            
+        except Exception as e:
+            logger.error(f"Scrape loop error: {e}", exc_info=True)
+    
+    async def _handle_vote_party_complete(self, total: int):
+        """Handle vote party completion"""
+        now = datetime.now(timezone.utc)
+        self.last_vote_party_time = now.strftime("%Y-%m-%d %H:%M")
+        
+        # Calculate duration
+        duration = None
+        if self.cycle_start_time:
+            duration = now.timestamp() - self.cycle_start_time
+        
+        # Get top contributors
+        top_contributors = sorted(
+            self.player_votes.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:5]
+        
+        # Record stats
+        if duration:
+            data_manager.append("stats", "completion_times", duration)
+            data_manager.increment("stats", "parties_completed")
+        
+        # Reset for next cycle
+        self.baseline = total
+        self.remaining = VOTE_GOAL
+        self.has_ping_sent = False
+        self.cycle_start_votes = {k: v for k, v in self.site_counts.items() if v is not None}
+        self.cycle_start_time = now.timestamp()
+        self.vote_history = []
+        
+        # Reset player votes
+        self.player_votes = {}
+        
+        # Clean up ping
+        self.ping_message_id = None
+        self.ping_timestamp = None
+        
+        logger.info(f"New cycle started. New baseline: {self.baseline}")
+    
+    def _save_vote_state(self):
+        """Save vote state to data"""
+        data_manager.set("vote_state", "baseline", self.baseline)
+        data_manager.set("vote_state", "remaining", self.remaining)
+        data_manager.set("vote_state", "site_counts", self.site_counts)
+        data_manager.set("vote_state", "last_updated", self.last_updated)
+        data_manager.set("vote_state", "has_ping_sent", self.has_ping_sent)
+        data_manager.set("vote_state", "cycle_start_votes", self.cycle_start_votes)
+        data_manager.set("vote_state", "cycle_start_time", self.cycle_start_time)
+        data_manager.set("vote_state", "last_vote_party_time", self.last_vote_party_time)
+        
+        # Save player data
+        data_manager.set("player_data", "votes", self.player_votes)
+        data_manager.set("player_data", "cooldowns", self.player_cooldowns)
+        data_manager.set("player_data", "streaks", self.player_streaks)
+        data_manager.set("player_data", "igns", self.player_igns)
+        data_manager.set("player_data", "reminders", self.player_reminders)
+
+        # Write through to disk now: the data manager auto-save task does not start
+        try:
+            asyncio.get_running_loop().create_task(data_manager.save_all())
+        except RuntimeError:
+            pass
+    
+    async def _resolve_tracker(self):
+        """Return an editable tracker message, re-fetching it by id when needed"""
+        if self.tracker_message is not None and hasattr(self.tracker_message, "edit"):
+            return self.tracker_message
+
+        self.tracker_message = None
+        msg_id = data_manager.get("vote_state", "message_id")
+        ch_id = data_manager.get("vote_state", "channel_id")
+        if not msg_id or not ch_id:
+            return None
+
+        channel = self.get_channel(ch_id)
+        if channel is None:
+            try:
+                channel = await self.fetch_channel(ch_id)
+            except Exception:
+                return None
+
+        try:
+            self.tracker_message = await channel.fetch_message(msg_id)
+            return self.tracker_message
+        except Exception:
+            # Stale id (message deleted) - forget it so a fresh tracker can be posted
+            logger.warning(f"Tracker message {msg_id} no longer exists - will post a new one")
+            data_manager.delete("vote_state", "message_id")
+            return None
+
+    async def _update_embed(self):
+        """Update the tracker embed"""
+        message = await self._resolve_tracker()
+        if message is None:
+            await self._ensure_tracker()
+            message = self.tracker_message
+        if message is None or not hasattr(message, "edit"):
+            return
+
+        try:
+            embed = self._build_vote_embed()
+            view = VoteNotifyView(self)
+            await message.edit(embed=embed, view=view)
+            logger.debug("Tracker embed updated")
+        except Exception as e:
+            logger.error(f"Failed to update embed: {e}")
+    
+    def _build_vote_embed(self) -> discord.Embed:
+        """Build the vote party embed"""
+        progress = max(0, VOTE_GOAL - self.remaining)
+        percentage = min(100, max(0, (progress / VOTE_GOAL) * 100))
+        
+        # Determine color
+        if self.remaining <= 0:
+            color = COLOR_BLUE
+        elif self.remaining <= PING_THRESHOLD:
+            color = COLOR_RED
+        elif self.remaining <= 50:
+            color = COLOR_TURQUOISE
+        else:
+            color = COLOR_BLUE
+        
+        # Build progress bar
+        filled = int(percentage / 10)
+        bar = "🟦" * filled + "⬜" * (10 - filled)
+        
+        # Status message
+        if self.remaining <= 0:
+            status = "🎉 **Vote Party Complete!**"
+        elif self.remaining <= 10:
+            status = "🔥 **Almost there! Party imminent!**"
+        elif self.remaining <= 30:
+            status = "⚡ **Getting close! Notify the server!**"
+        elif self.remaining <= 100:
+            status = "💪 **Good progress! Keep it up!**"
+        else:
+            status = "🗳️ **Vote party in progress**"
+        
+        embed = discord.Embed(
+            title=f"{NATION_FLAG} {NATION_NAME} Vote Party",
+            description="",
+            color=color
+        )
+        
+        # Build description
+        if self.remaining <= 0:
+            embed.description = (
+                f"🎉 **Vote Party Complete!**\n"
+                f"Starting new cycle...\n\n"
+                f"{bar} 100.0%\n"
+                f"{VOTE_GOAL} / {VOTE_GOAL} votes collected"
+            )
+        else:
+            embed.description = (
+                f"**{self.remaining}** votes remaining\n"
+                f"{bar} {percentage:.1f}%\n"
+                f"{progress} / {VOTE_GOAL} votes collected\n\n"
+                f"{status}"
+            )
+        
+        # Add separator
+        embed.description += "\n\n━━━━━━━━━━━━━━━━━━━━\n"
+        embed.description += "🗳️ **Vote Counts**\n"
+        
+        # Site votes (use each site's configured emoji, fall back to color squares)
+        fallback_emojis = ["🟡", "🔵", "🔴"]
+        for i, site in enumerate(VOTE_SITES):
+            name = site["name"]
+            count = self.site_counts.get(name)
+            emoji = site.get("emoji", fallback_emojis[i % len(fallback_emojis)])
+            
+            if count is not None:
+                contribution = None
+                if name in self.cycle_start_votes:
+                    contribution = count - self.cycle_start_votes[name]
+                
+                if contribution and contribution > 0:
+                    embed.description += f"{emoji} {name} — **{count:,}** (+{contribution})\n"
+                else:
+                    embed.description += f"{emoji} {name} — **{count:,}**\n"
+            else:
+                embed.description += f"{emoji} {name} — ⚠️ Unavailable\n"
+        
+        # Claimed votes
+        total_claimed = sum(self.player_votes.values())
+        if total_claimed > 0:
+            embed.description += f"\n🗳️ **Claimed this cycle:** {total_claimed} votes ({MAX_VOTES_PER_CYCLE} per player)\n"
+        
+        # Vote links
+        embed.description += "🔗 **Vote Now!**\n"
+        embed.description += "━━━━━━━━━━━━━━━━\n"
+        for i, site in enumerate(VOTE_SITES, 1):
+            embed.description += f"{i}. [Vote on {site['name']}]({site['url']})\n"
+        
+        # Footer
+        footer_parts = []
+        if self.last_vote_party_time:
+            footer_parts.append(f"Last VP: {self.last_vote_party_time}")
+        if self.last_updated:
+            footer_parts.append(f"Updated {self.last_updated}")
+        footer_parts.append(f"Updates every {SCRAPE_INTERVAL_SECONDS}s")
+        
+        embed.set_footer(text=" • ".join(footer_parts))
+        
+        return embed
+    
+    async def _check_ping(self):
+        """Check if we should ping the VP role"""
+        if self.remaining <= PING_THRESHOLD and not self.has_ping_sent:
+            if self.tracker_message and self.tracker_message.guild:
+                vp_role = discord.utils.get(self.tracker_message.guild.roles, name=VP_ROLE)
+                if vp_role:
+                    try:
+                        ping_msg = await self.tracker_message.channel.send(
+                            f"🚨 **{vp_role.mention}** Only **{self.remaining}** votes left until the Vote Party! Vote now!",
+                            allowed_mentions=discord.AllowedMentions(roles=True)
+                        )
+                        self.has_ping_sent = True
+                        self.ping_message_id = ping_msg.id
+                        self.ping_timestamp = datetime.now(timezone.utc).timestamp()
+                        self._save_vote_state()
+                        logger.info(f"🔔 VP role pinged! Remaining: {self.remaining}")
+                    except Exception as e:
+                        logger.error(f"Failed to send ping: {e}")
+    
+    async def _cleanup_old_ping(self):
+        """Delete old ping message"""
+        if not self.ping_message_id or not self.ping_timestamp:
+            return
+        
+        now = datetime.now(timezone.utc).timestamp()
+        age = now - self.ping_timestamp
+        
+        if age >= PING_DELETE_SECONDS:
+            if self.tracker_message:
+                try:
+                    channel = self.tracker_message.channel
+                    ping_msg = await channel.fetch_message(self.ping_message_id)
+                    await ping_msg.delete()
+                    logger.info(f"🗑️ Deleted old ping message")
+                except Exception:
+                    pass
+            
+            self.ping_message_id = None
+            self.ping_timestamp = None
+            self._save_vote_state()
+
+# ─── Cogs ─────────────────────────────────────────────────────────────────────
+
+class VotePartyCog(commands.Cog):
+    """Vote party commands"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+    
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Handle button interactions"""
+        if interaction.type != discord.InteractionType.component:
+            return
+        
+        custom_id = interaction.data.get("custom_id")
+        
+        if custom_id == "vote_claim_button":
+            await self._handle_vote_claim(interaction)
+        elif custom_id == "vote_notify_toggle":
+            await self._handle_notify_toggle(interaction)
+        elif custom_id == "vote_remind_button":
+            await self._handle_remind_me(interaction)
+        elif custom_id == "vote_howto_button":
+            await self._handle_howto(interaction)
+        elif custom_id == "vote_leaderboard_button":
+            await self._handle_leaderboard_button(interaction)
+
+    async def _handle_remind_me(self, interaction: discord.Interaction):
+        """Handle the '⏰ Remind Me' button - DM a reminder in 30 minutes."""
+        user_id = interaction.user.id
+        now = datetime.now(timezone.utc).timestamp()
+
+        existing = self.bot.player_reminders.get(user_id)
+        if existing is not None:
+            elapsed = now - existing
+            remaining_cooldown = REMINDER_COOLDOWN - elapsed
+            if remaining_cooldown > 0:
+                mins = int(remaining_cooldown // 60)
+                await interaction.response.send_message(
+                    f"⏳ You already have a reminder set. Try again in **{mins}m**.",
+                    ephemeral=True
+                )
+                return
+
+        self.bot.player_reminders[user_id] = now
+        self.bot._save_vote_state()
+
+        lang = i18n.get_user_lang(user_id)
+        msg = (
+            "⏰ I'll remind you in **30 minutes** to vote!"
+            if lang != "es" else
+            "⏰ ¡Te recordaré en **30 minutos** para votar!"
+        )
+        await interaction.response.send_message(msg, ephemeral=True)
+    
+    async def _handle_vote_claim(self, interaction: discord.Interaction):
+        """Handle vote claim button"""
+        user_id = interaction.user.id
+        
+        # Check if user has linked IGN
+        if user_id not in self.bot.player_igns:
+            await interaction.response.send_message(
+                "🔗 Please link your Minecraft username first using `/link`.",
+                ephemeral=True
+            )
+            return
+        
+        # Check cooldown
+        last_claim = self.bot.player_cooldowns.get(user_id, 0)
+        now = datetime.now(timezone.utc).timestamp()
+        
+        if now - last_claim < 3600:  # 1 hour cooldown
+            remaining = int(3600 - (now - last_claim))
+            await interaction.response.send_message(
+                f"⏳ You can claim another vote in **{remaining // 60}m**.",
+                ephemeral=True
+            )
+            return
+        
+        # Check cycle limit
+        votes_this_cycle = self.bot.player_votes.get(user_id, 0)
+        if votes_this_cycle >= MAX_VOTES_PER_CYCLE:
+            await interaction.response.send_message(
+                f"⚠️ You've already claimed all **{MAX_VOTES_PER_CYCLE}** votes for this cycle!",
+                ephemeral=True
+            )
+            return
+        
+        # Claim the vote
+        self.bot.player_votes[user_id] = votes_this_cycle + 1
+        self.bot.player_cooldowns[user_id] = now
+
+        # Update streak (consecutive claims within 24h keep it alive)
+        last_claim_date = datetime.fromtimestamp(last_claim, tz=timezone.utc).date() if last_claim else None
+        claim_date = datetime.fromtimestamp(now, tz=timezone.utc).date()
+        if last_claim_date and (claim_date - last_claim_date).days > 1:
+            self.bot.player_streaks[user_id] = 1  # gap of >1 day resets streak
+        else:
+            self.bot.player_streaks[user_id] = self.bot.player_streaks.get(user_id, 0) + 1
+
+        # Voting clears any pending reminder for this cycle
+        self.bot.player_reminders.pop(user_id, None)
+
+        self.bot._save_vote_state()
+        
+        # Send confirmation
+        total_votes = self.bot.player_votes[user_id]
+        streak = self.bot.player_streaks[user_id]
+        
+        if streak > 1:
+            msg = f"✅ **{interaction.user.mention}** voted! 🔥 **{streak} vote streak!**\n*They now have **{total_votes}/{MAX_VOTES_PER_CYCLE}** votes this cycle*"
+        else:
+            msg = f"✅ **{interaction.user.mention}** voted!\n*They now have **{total_votes}/{MAX_VOTES_PER_CYCLE}** votes this cycle*"
+        
+        await interaction.response.send_message(msg)
+        confirm_msg = await interaction.original_response()
+        
+        # Auto-delete after 1 second
+        asyncio.create_task(self._delete_after(confirm_msg, 1))
+        
+        # Update embed
+        await self.bot._update_embed()
+    
+    async def _handle_notify_toggle(self, interaction: discord.Interaction):
+        """Handle notification toggle"""
+        member = interaction.user
+        vp_role = discord.utils.get(interaction.guild.roles, name=VP_ROLE)
+        
+        if not vp_role:
+            await interaction.response.send_message(
+                "❌ The 'VP' role was not found.",
+                ephemeral=True
+            )
+            return
+        
+        try:
+            if vp_role in member.roles:
+                await member.remove_roles(vp_role)
+                await interaction.response.send_message(
+                    "✅ You will **no longer** be notified for vote party updates.",
+                    ephemeral=True
+                )
+            else:
+                await member.add_roles(vp_role)
+                await interaction.response.send_message(
+                    "✅ You will now be **notified** when the vote party is close!",
+                    ephemeral=True
+                )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Error: {e}",
+                ephemeral=True
+            )
+    
+    async def _handle_howto(self, interaction: discord.Interaction):
+        """Handle the 'How to Vote' button"""
+        sites = "\n".join(
+            f"{i}. [{site['name']}]({site['url']})"
+            for i, site in enumerate(VOTE_SITES, 1)
+        )
+        embed = discord.Embed(
+            title="📖 How to Vote",
+            description=sites,
+            color=COLOR_GOLD,
+        )
+
+        next_steps = (
+            "After voting, use `/link <ign>` to link your Minecraft username, "
+            "then click ✅ I Voted! to claim your vote."
+        )
+        if self.bot.tracker_message:
+            embed.description += f"\n\n[Open the vote tracker]({self.bot.tracker_message.jump_url})"
+        embed.add_field(name="Next steps", value=next_steps, inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def _handle_leaderboard_button(self, interaction: discord.Interaction):
+        """Handle the 'Leaderboard' button"""
+        await interaction.response.send_message(
+            embed=self._build_leaderboard_embed(),
+            ephemeral=True,
+        )
+
+    def _build_leaderboard_embed(self) -> discord.Embed:
+        """Build the this-cycle vote leaderboard embed"""
+        sorted_votes = sorted(
+            self.bot.player_votes.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:10]
+
+        embed = discord.Embed(
+            title="🏆 Vote Leaderboard - This Cycle",
+            description="",
+            color=COLOR_GOLD
+        )
+
+        if not sorted_votes:
+            embed.description = "No votes claimed yet. Be the first!"
+        else:
+            for rank, (user_id, votes) in enumerate(sorted_votes, 1):
+                ign = self.bot.player_igns.get(user_id, "Unknown")
+                embed.description += f"**#{rank}** {ign} — **{votes}** votes\n"
+
+        return embed
+
+    async def _delete_after(self, message, delay: int):
+        """Delete message after delay"""
+        await asyncio.sleep(delay)
+        try:
+            await message.delete()
+        except:
+            pass
+    
+    @discord.app_commands.command(name="party", description="Show the current vote party status")
+    async def party(self, interaction: discord.Interaction):
+        """Show current vote party status"""
+        embed = self.bot._build_vote_embed() if hasattr(self.bot, "_build_vote_embed") else None
+        if embed is None:
+            embed = discord.Embed(
+                title=f"🗳️ {BOT_NAME} — Vote Party",
+                description=(
+                    f"**Remaining votes:** {self.bot.remaining}/{VOTE_GOAL}\n"
+                    f"**Last updated:** {self.bot.last_updated or 'Never'}"
+                ),
+                color=0x00C853,
+            )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.app_commands.command(name="parties", description="List recent vote parties")
+    async def parties(self, interaction: discord.Interaction):
+        """List recent completed vote parties"""
+        lang = "en"  # TODO: i18n user preference
+        history = getattr(self.bot, "vote_history", []) or []
+        completed = [h for h in history if isinstance(h, dict)]
+
+        if not completed:
+            await interaction.response.send_message(
+                "ℹ️ No vote party history yet. The first one will show up here once complete!",
+                ephemeral=True,
+            )
+            return
+
+        lines = []
+        for entry in completed[-10:][::-1]:
+            when = entry.get("time") or entry.get("completed_at") or entry.get("date")
+            if not when and entry.get("timestamp"):
+                try:
+                    when = datetime.fromtimestamp(entry["timestamp"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+                except (TypeError, ValueError, OSError):
+                    when = None
+            total = entry.get("total") or entry.get("votes") or "?"
+            lines.append(f"• **{when or '?'}** — {total} votes")
+
+        embed = discord.Embed(
+            title="📜 Recent Vote Parties",
+            description="\n".join(lines),
+            color=0x00C853,
+        )
+        if self.bot.last_vote_party_time:
+            embed.set_footer(text=f"Last VP: {self.bot.last_vote_party_time}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.app_commands.command(name="info", description="View your vote stats and linked account")
+    async def info(self, interaction: discord.Interaction):
+        """View personal vote info"""
+        user_id = interaction.user.id
+        ign = self.bot.player_igns.get(user_id)
+        votes = self.bot.player_votes.get(user_id, 0)
+        streak = self.bot.player_streaks.get(user_id, 0)
+
+        embed = discord.Embed(
+            title=f"📋 Info for {interaction.user.display_name}",
+            color=0xF1C40F,
+        )
+        embed.add_field(name="Linked IGN", value=ign or "❌ Not linked — use `/link <ign>`", inline=False)
+        embed.add_field(name="Votes this cycle", value=f"{votes}/{MAX_VOTES_PER_CYCLE}", inline=True)
+        embed.add_field(name="Streak", value=f"🔥 {streak}", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.app_commands.command(name="leave", description="Reset your vote-party progress for this cycle")
+    async def leave(self, interaction: discord.Interaction):
+        """Leave the current vote party cycle (resets claims/streak)"""
+        user_id = interaction.user.id
+        if user_id not in self.bot.player_votes:
+            await interaction.response.send_message(
+                "ℹ️ You don't have any vote-party progress this cycle.",
+                ephemeral=True,
+            )
+            return
+
+        self.bot.player_votes.pop(user_id, None)
+        self.bot.player_cooldowns.pop(user_id, None)
+        self.bot.player_streaks.pop(user_id, None)
+        self.bot._save_vote_state()
+
+        await interaction.response.send_message(
+            "✅ You've left the current vote party. Your progress was reset.",
+            ephemeral=True,
+        )
+
+    @discord.app_commands.command(name="link", description="Link your Minecraft username")
+    @discord.app_commands.describe(ign="Your Minecraft in-game name")
+    async def link(self, interaction: discord.Interaction, ign: str):
+        """Link Minecraft username"""
+        import re
+        
+        if not re.match(r'^[a-zA-Z0-9_]{3,16}$', ign):
+            await interaction.response.send_message(
+                "❌ Invalid username. Minecraft usernames are 3-16 characters (letters, numbers, underscores).",
+                ephemeral=True
+            )
+            return
+        
+        self.bot.player_igns[interaction.user.id] = ign
+        self.bot._save_vote_state()
+        
+        await interaction.response.send_message(
+            f"✅ Linked your Minecraft username to **{ign}**!",
+            ephemeral=True
+        )
+    
+    @discord.app_commands.command(name="myvotes", description="View your vote stats")
+    async def myvotes(self, interaction: discord.Interaction):
+        """View personal vote stats"""
+        user_id = interaction.user.id
+        
+        ign = self.bot.player_igns.get(user_id)
+        if not ign:
+            await interaction.response.send_message(
+                "🔗 You haven't linked your Minecraft username yet!\nUse `/link` to get started.",
+                ephemeral=True
+            )
+            return
+        
+        votes_this_cycle = self.bot.player_votes.get(user_id, 0)
+        streak = self.bot.player_streaks.get(user_id, 0)
+        
+        embed = discord.Embed(
+            title="🗳️ Your Vote Stats",
+            description=f"🎮 **{ign}**\n\n",
+            color=COLOR_GOLD
+        )
+        
+        embed.description += f"📊 **This Cycle:** {votes_this_cycle}/{MAX_VOTES_PER_CYCLE}\n"
+        embed.description += f"🔥 **Current Streak:** {streak} votes\n"
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.app_commands.command(name="leaderboard", description="View vote leaderboard")
+    async def leaderboard(self, interaction: discord.Interaction):
+        """View vote leaderboard"""
+        await interaction.response.send_message(
+            embed=self._build_leaderboard_embed(),
+            ephemeral=True
+        )
+
+    # ─── Admin: /voteparty ────────────────────────────────────────────────────
+
+    voteparty = discord.app_commands.Group(
+        name="voteparty",
+        description="Admin tools for the vote party tracker",
+    )
+
+    @voteparty.command(name="setup", description="Post the vote party tracker in this channel")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_setup(self, interaction: discord.Interaction):
+        """Post a fresh tracker embed and remember it"""
+        embed = self.bot._build_vote_embed()
+        view = VoteNotifyView(self.bot)
+        await interaction.response.send_message(embed=embed, view=view)
+        message = await interaction.original_response()
+
+        self.bot.tracker_message = message
+        data_manager.set("vote_state", "message_id", message.id)
+        data_manager.set("vote_state", "channel_id", interaction.channel_id)
+        self.bot._save_vote_state()
+
+        await interaction.followup.send(
+            "✅ Vote party tracker posted and saved.",
+            ephemeral=True
+        )
+
+    @voteparty.command(name="setremaining", description="Set the remaining votes needed")
+    @discord.app_commands.describe(value="New remaining vote count")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_setremaining(self, interaction: discord.Interaction, value: int):
+        """Force remaining by adjusting baseline so the next scrape keeps it."""
+        await interaction.response.defer(ephemeral=True)
+
+        if value < 0 or value > VOTE_GOAL:
+            await interaction.followup.send(
+                f"Value must be between 0 and {VOTE_GOAL}.",
+                ephemeral=True,
+            )
+            return
+
+        # Prefer live scrape so baseline matches what the loop will see next
+        try:
+            counts, total = await self.bot.scraper.scrape_all()
+            for name, count in list(counts.items()):
+                if count is None and name in self.bot.scraper.last_successful_counts:
+                    counts[name] = self.bot.scraper.last_successful_counts[name]
+            total = sum(v for v in counts.values() if v is not None)
+            if total:
+                self.bot.site_counts = counts
+        except Exception:
+            total = sum(v for v in self.bot.site_counts.values() if v is not None)
+
+        if not total:
+            await interaction.followup.send(
+                "No site totals available yet. Wait for a scrape, then try again.",
+                ephemeral=True,
+            )
+            return
+
+        # remaining = GOAL - (total - baseline)  →  baseline = total - (GOAL - value)
+        progress = VOTE_GOAL - value
+        self.bot.baseline = total - progress
+        self.bot.remaining = value
+        self.bot.has_ping_sent = value > PING_THRESHOLD
+        self.bot._save_vote_state()
+        await self.bot._update_embed()
+
+        await interaction.followup.send(
+            f"✅ Remaining **{value}** locked in.\n"
+            f"Baseline set to **{self.bot.baseline}** (live total **{total}**).\n"
+            f"Next scrape should keep this number.",
+            ephemeral=True,
+        )
+
+    @voteparty.command(name="setbaseline", description="Set the baseline, or reset it to the current total")
+    @discord.app_commands.describe(value="New baseline (omit to use the current scraped total)")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_setbaseline(self, interaction: discord.Interaction, value: int = None):
+        """Set the baseline and recompute remaining votes"""
+        total = sum(v for v in self.bot.site_counts.values() if v is not None)
+        baseline = value if value is not None else total
+
+        self.bot.baseline = baseline
+        self.bot.remaining = max(0, VOTE_GOAL - (total - baseline))
+        self.bot._save_vote_state()
+        await self.bot._update_embed()
+
+        await interaction.response.send_message(
+            f"✅ Baseline set to **{baseline}**. Remaining: **{self.bot.remaining}** votes.",
+            ephemeral=True
+        )
+
+    @voteparty.command(name="forceupdate", description="Scrape the vote sites right now")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_forceupdate(self, interaction: discord.Interaction):
+        """Run a scrape immediately"""
+        await interaction.response.defer(ephemeral=True)
+        await self.bot._perform_scrape_and_update()
+
+        await interaction.followup.send(
+            f"✅ Scrape complete. Remaining: **{self.bot.remaining}** votes.",
+            ephemeral=True
+        )
+
+    @voteparty.command(name="fixbaseline", description="Reset the baseline to the current scraped total")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_fixbaseline(self, interaction: discord.Interaction):
+        """Reset the baseline to the current scraped total"""
+        total = sum(v for v in self.bot.site_counts.values() if v is not None)
+
+        self.bot.baseline = total
+        self.bot._save_vote_state()
+        await self.bot._update_embed()
+
+        await interaction.response.send_message(
+            f"✅ Baseline fixed to **{total}**.",
+            ephemeral=True
+        )
+
+    @voteparty.command(name="scraperstats", description="Show scraper status for every vote site")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_scraperstats(self, interaction: discord.Interaction):
+        """Show per-site scraper state"""
+        lines = []
+        for site in VOTE_SITES:
+            name = site["name"]
+            count = self.bot.site_counts.get(name)
+            value = f"**{count:,}**" if count is not None else "⚠️ Unavailable"
+            lines.append(f"{site.get('emoji', '•')} {name} — {value}")
+
+        embed = discord.Embed(
+            title="🔍 Scraper Stats",
+            description="\n".join(lines),
+            color=COLOR_GOLD
+        )
+        embed.add_field(name="Interval", value=f"{SCRAPE_INTERVAL_SECONDS}s", inline=True)
+        embed.add_field(name="Ping threshold", value=str(PING_THRESHOLD), inline=True)
+        embed.add_field(name="Last updated", value=self.bot.last_updated or "Never", inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @voteparty.command(name="reset", description="Start a fresh vote party cycle")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def voteparty_reset(self, interaction: discord.Interaction):
+        """Reset the cycle: baseline to current total, remaining to goal"""
+        total = sum(v for v in self.bot.site_counts.values() if v is not None)
+
+        self.bot.baseline = total
+        self.bot.remaining = VOTE_GOAL
+        self.bot.player_votes = {}
+        self.bot.ping_message_id = None
+        self.bot.ping_timestamp = None
+        self.bot.has_ping_sent = False
+        self.bot._save_vote_state()
+        await self.bot._update_embed()
+
+        await interaction.response.send_message(
+            f"✅ Vote party reset. Baseline **{total}**, remaining **{VOTE_GOAL}** votes.",
+            ephemeral=True
+        )
+
+class NationCog(commands.Cog):
+    """Nation management commands"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+    
+    @discord.app_commands.command(name="role-request", description="Request a nation role")
+    async def role_request(self, interaction: discord.Interaction):
+        """Show role request panel"""
+        embed = discord.Embed(
+            title=f"{NATION_FLAG} {NATION_NAME} Role Requests",
+            description=(
+                "Choose a role below. Citizenship and Ally requests go to leadership review. "
+                "Vote Party Pings can be toggled instantly.\n\n"
+                "**Request format:**\n"
+                "Minecraft username · Nation · Town · Nation role"
+            ),
+            color=COLOR_GOLD
+        )
+        
+        view = RoleRequestView(self.bot)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+class WelcomeCog(commands.Cog):
+    """Advanced welcome system with interactive onboarding"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+        self.welcome_streaks = {}  # Track consecutive welcomes
+        self.welcome_games = {}  # Active welcome games
+    
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        """Advanced welcome with interactive onboarding"""
+        welcome_channel = discord.utils.get(member.guild.text_channels, name="welcome")
+        
+        if not welcome_channel:
+            return
+        
+        # Calculate welcome streak
+        guild_id = member.guild.id
+        self.welcome_streaks[guild_id] = self.welcome_streaks.get(guild_id, 0) + 1
+        streak = self.welcome_streaks[guild_id]
+        lang = i18n.get_user_lang(member.id)
+        if lang == "es":
+            welcome_stats = (
+                f"**Racha de bienvenidas:** 🔥 {streak}\n"
+                f"**Miembro #{member.guild.member_count}**"
+            )
+            welcome_content = (
+                f"{NATION_FLAG} {member.mention} acaba de llegar a {NATION_NAME}. "
+                "¡Bienvenido a la isla!"
+            )
+        else:
+            welcome_stats = (
+                f"**Welcome streak:** 🔥 {streak}\n"
+                f"**Member #{member.guild.member_count}**"
+            )
+            welcome_content = (
+                f"{NATION_FLAG} {member.mention} just joined {NATION_NAME}. "
+                "Welcome to the island!"
+            )
+        
+        # Create interactive welcome embed
+        embed = discord.Embed(
+            title=i18n.get("welcome_title", lang, user=member.display_name),
+            description=(
+                f"{welcome_stats}\n\n"
+                f"{i18n.get('welcome_desc', lang)}"
+            ),
+            color=BOT_COLOR,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=i18n.get("welcome_footer", lang))
+        
+        # Create interactive onboarding view
+        view = WelcomeOnboardingView(self.bot, member)
+        
+        welcome_msg = await welcome_channel.send(
+            content=welcome_content,
+            embed=embed,
+            view=view
+        )
+        
+        # Start welcome game (optional)
+        if streak % 10 == 0:  # Every 10th member
+            await self.start_welcome_game(welcome_channel, member, streak)
+    
+    async def start_welcome_game(self, channel, new_member, streak):
+        """Start a welcome celebration game"""
+        game_embed = discord.Embed(
+            title="🎊 MILESTONE WELCOME! 🎊",
+            description=(
+                f"**{new_member.display_name}** is member #{streak}!\n\n"
+                "🎁 **Special Rewards:**\n"
+                "• Exclusive 'Milestone Member' role\n"
+                "• Featured in #hall-of-fame\n\n"
+                f"Give {new_member.display_name} a warm welcome in the chat!"
+            ),
+            color=0xFFD700
+        )
+        
+        await channel.send(embed=game_embed)
+        
+        # Give milestone role
+        milestone_role = discord.utils.get(new_member.guild.roles, name="Milestone Member")
+        if milestone_role:
+            await new_member.add_roles(milestone_role)
+
+class DiplomacyCog(commands.Cog):
+    """Advanced diplomacy system with wars, alliances, and treaties"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+    
+    @discord.app_commands.command(name="diplomacy", description="Open diplomatic request")
+    async def diplomacy(self, interaction: discord.Interaction):
+        """Show diplomacy panel"""
+        embed = discord.Embed(
+            title="🌐 Foreign Affairs",
+            description=(
+                "Manage diplomatic relations with other nations.\n\n"
+                "**Current Relations:**\n"
+                "🟢 **Allies:** 3 nations\n"
+                "🟡 **Neutral:** 5 nations\n"
+                "🔴 **Enemies:** 1 nation\n\n"
+                "Use the buttons below to manage diplomacy."
+            ),
+            color=COLOR_BLUE
+        )
+        
+        view = DiplomacyView(self.bot)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    
+    @discord.app_commands.command(name="declare-war", description="Declare war on another nation")
+    @discord.app_commands.checks.has_role(LEADERSHIP_ROLE)
+    async def declare_war(self, interaction: discord.Interaction, nation: str, reason: str):
+        """Declare war on another nation"""
+        # Check if already at war
+        wars = data_manager.get("diplomacy", "wars", [])
+        for war in wars:
+            if war["attacker"] == nation or war["defender"] == nation:
+                await interaction.response.send_message(
+                    f"❌ {NATION_NAME} is already at war with {nation}!",
+                    ephemeral=True
+                )
+                return
+        
+        # Create war
+        war = {
+            "attacker": NATION_NAME,
+            "defender": nation,
+            "reason": reason,
+            "declared_by": interaction.user.id,
+            "declared_at": discord.utils.utcnow().isoformat(),
+            "status": "active",
+            "battles": []
+        }
+        
+        wars.append(war)
+        data_manager.set("diplomacy", "wars", wars)
+        
+        # Create war announcement
+        war_embed = discord.Embed(
+            title="⚔️ WAR DECLARED ⚔️",
+            description=(
+                f"**{NATION_NAME}** has declared war on **{nation}**!\n\n"
+                f"**Reason:** {reason}\n"
+                f"**Declared by:** {interaction.user.mention}\n\n"
+                "🔴 **Status:** Active\n"
+                "May the best nation win!"
+            ),
+            color=COLOR_RED,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Send to announcements
+        announcements = discord.utils.get(interaction.guild.text_channels, name="announcements")
+        if announcements:
+            await announcements.send(embed=war_embed)
+        
+        await interaction.response.send_message(
+            f"⚔️ War declared on **{nation}**! The nation has been notified.",
+            ephemeral=True
+        )
+    
+    @discord.app_commands.command(name="propose-alliance", description="Propose alliance with another nation")
+    @discord.app_commands.checks.has_role(LEADERSHIP_ROLE)
+    async def propose_alliance(self, interaction: discord.Interaction, nation: str, terms: str):
+        """Propose alliance"""
+        # Create alliance proposal
+        proposal = {
+            "proposer": NATION_NAME,
+            "target": nation,
+            "terms": terms,
+            "proposed_by": interaction.user.id,
+            "proposed_at": discord.utils.utcnow().isoformat(),
+            "status": "pending",
+            "votes": {"for": 0, "against": 0}
+        }
+        
+        alliances = data_manager.get("diplomacy", "alliance_proposals", [])
+        alliances.append(proposal)
+        data_manager.set("diplomacy", "alliance_proposals", alliances)
+        
+        # Create proposal embed
+        proposal_embed = discord.Embed(
+            title="🤝 Alliance Proposal",
+            description=(
+                f"**{NATION_NAME}** proposes an alliance with **{nation}**\n\n"
+                f"**Terms:** {terms}\n"
+                f"**Proposed by:** {interaction.user.mention}\n\n"
+                "Leadership must vote on this proposal."
+            ),
+            color=COLOR_GOLD,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        view = AllianceVoteView(self.bot, len(alliances) - 1)
+        
+        # Send to leadership
+        leadership = discord.utils.get(interaction.guild.text_channels, name="leadership")
+        lead_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership:
+            await leadership.send(
+                content=f"🤝 **New Alliance Proposal** {lead_role.mention if lead_role else ''}",
+                embed=proposal_embed,
+                view=view
+            )
+        
+        await interaction.response.send_message(
+            f"🤝 Alliance proposal sent to **{nation}**! Leadership will vote on it.",
+            ephemeral=True
+        )
+    
+    @discord.app_commands.command(name="peace-treaty", description="Propose peace treaty")
+    @discord.app_commands.checks.has_role(LEADERSHIP_ROLE)
+    async def peace_treaty(self, interaction: discord.Interaction, nation: str, terms: str):
+        """Propose peace treaty"""
+        # Find active war
+        wars = data_manager.get("diplomacy", "wars", [])
+        war_found = False
+        
+        for war in wars:
+            if war["defender"] == nation and war["status"] == "active":
+                war_found = True
+                break
+        
+        if not war_found:
+            await interaction.response.send_message(
+                f"❌ {NATION_NAME} is not at war with {nation}!",
+                ephemeral=True
+            )
+            return
+        
+        # Create peace treaty
+        treaty = {
+            "nation1": NATION_NAME,
+            "nation2": nation,
+            "terms": terms,
+            "proposed_by": interaction.user.id,
+            "proposed_at": discord.utils.utcnow().isoformat(),
+            "status": "pending"
+        }
+        
+        treaties = data_manager.get("diplomacy", "treaties", [])
+        treaties.append(treaty)
+        data_manager.set("diplomacy", "treaties", treaties)
+        
+        # Create treaty embed
+        treaty_embed = discord.Embed(
+            title="🕊️ Peace Treaty Proposed",
+            description=(
+                f"**{NATION_NAME}** proposes peace with **{nation}**\n\n"
+                f"**Terms:** {terms}\n"
+                f"**Proposed by:** {interaction.user.mention}\n\n"
+                "Both nations must agree to the terms."
+            ),
+            color=COLOR_BLUE,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Send to leadership
+        leadership = discord.utils.get(interaction.guild.text_channels, name="leadership")
+        if leadership:
+            await leadership.send(
+                content="🕊️ **Peace Treaty Proposed** <@&LEADERSHIP_ROLE_ID>",
+                embed=treaty_embed
+            )
+        
+        await interaction.response.send_message(
+            f"🕊️ Peace treaty proposed to **{nation}**! Awaiting their response.",
+            ephemeral=True
+        )
+    
+    @discord.app_commands.command(name="relations", description="View diplomatic relations")
+    async def relations(self, interaction: discord.Interaction):
+        """View diplomatic relations"""
+        alliances = data_manager.get("diplomacy", "alliances", [])
+        wars = data_manager.get("diplomacy", "wars", [])
+        neutrals = data_manager.get("diplomacy", "neutrals", [])
+        
+        embed = discord.Embed(
+            title="🌐 Diplomatic Relations",
+            description=f"Current status of {NATION_NAME}'s diplomatic relations",
+            color=COLOR_BLUE,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Allies
+        if alliances:
+            ally_list = "\n".join([f"🟢 {a['nation']}" for a in alliances])
+            embed.add_field(name="🤝 Allies", value=ally_list or "None", inline=True)
+        else:
+            embed.add_field(name="🤝 Allies", value="None", inline=True)
+        
+        # Wars
+        active_wars = [w for w in wars if w["status"] == "active"]
+        if active_wars:
+            war_list = "\n".join([f"⚔️ {w['defender']}" for w in active_wars])
+            embed.add_field(name="⚔️ At War With", value=war_list, inline=True)
+        else:
+            embed.add_field(name="⚔️ At War With", value="None", inline=True)
+        
+        # Neutrals
+        if neutrals:
+            neutral_list = "\n".join([f"🟡 {n}" for n in neutrals[:10]])
+            embed.add_field(name="🟡 Neutral", value=neutral_list or "None", inline=True)
+        else:
+            embed.add_field(name="🟡 Neutral", value="None", inline=True)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class DiplomacyView(discord.ui.View):
+    """Diplomacy management view"""
+    
+    def __init__(self, bot: CastroBot):
+        super().__init__(timeout=None)
+        self.bot = bot
+    
+    @discord.ui.button(
+        label="📊 View Relations",
+        style=discord.ButtonStyle.primary,
+        custom_id="diplomacy_view_relations"
+    )
+    async def view_relations(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """View relations"""
+        # This would call the relations command
+        await interaction.response.send_message(
+            "Use `/relations` to view diplomatic relations!",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(
+        label="⚔️ Declare War",
+        style=discord.ButtonStyle.danger,
+        custom_id="diplomacy_declare_war"
+    )
+    async def declare_war(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Declare war"""
+        leadership_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only leadership can declare war!",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_message(
+            "Use `/declare-war <nation> <reason>` to declare war!",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(
+        label="🤝 Propose Alliance",
+        style=discord.ButtonStyle.success,
+        custom_id="diplomacy_propose_alliance"
+    )
+    async def propose_alliance(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Propose alliance"""
+        leadership_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only leadership can propose alliances!",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_message(
+            "Use `/propose-alliance <nation> <terms>` to propose an alliance!",
+            ephemeral=True
+        )
+
+class AllianceVoteView(discord.ui.View):
+    """View for voting on alliance proposals"""
+    
+    def __init__(self, bot: CastroBot, proposal_index: int):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.proposal_index = proposal_index
+    
+    @discord.ui.button(
+        label="✅ Vote For",
+        style=discord.ButtonStyle.success,
+        custom_id="alliance_vote_for"
+    )
+    async def vote_for(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Vote for alliance"""
+        leadership_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only leadership can vote!",
+                ephemeral=True
+            )
+            return
+        
+        # Record vote
+        alliances = data_manager.get("diplomacy", "alliance_proposals", [])
+        if self.proposal_index < len(alliances):
+            proposal = alliances[self.proposal_index]
+            voter_id = str(interaction.user.id)
+            
+            if "voters" not in proposal:
+                proposal["voters"] = {}
+            
+            if voter_id in proposal["voters"]:
+                await interaction.response.send_message(
+                    "❌ You've already voted!",
+                    ephemeral=True
+                )
+                return
+            
+            proposal["voters"][voter_id] = "for"
+            proposal["votes"]["for"] += 1
+            alliances[self.proposal_index] = proposal
+            data_manager.set("diplomacy", "alliance_proposals", alliances)
+            
+            await interaction.response.send_message(
+                "✅ Vote recorded! You voted FOR the alliance.",
+                ephemeral=True
+            )
+    
+    @discord.ui.button(
+        label="❌ Vote Against",
+        style=discord.ButtonStyle.danger,
+        custom_id="alliance_vote_against"
+    )
+    async def vote_against(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Vote against alliance"""
+        leadership_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only leadership can vote!",
+                ephemeral=True
+            )
+            return
+        
+        # Record vote
+        alliances = data_manager.get("diplomacy", "alliance_proposals", [])
+        if self.proposal_index < len(alliances):
+            proposal = alliances[self.proposal_index]
+            voter_id = str(interaction.user.id)
+            
+            if "voters" not in proposal:
+                proposal["voters"] = {}
+            
+            if voter_id in proposal["voters"]:
+                await interaction.response.send_message(
+                    "❌ You've already voted!",
+                    ephemeral=True
+                )
+                return
+            
+            proposal["voters"][voter_id] = "against"
+            proposal["votes"]["against"] += 1
+            alliances[self.proposal_index] = proposal
+            data_manager.set("diplomacy", "alliance_proposals", alliances)
+            
+            await interaction.response.send_message(
+                "❌ Vote recorded! You voted AGAINST the alliance.",
+                ephemeral=True
+            )
+
+class TownyCog(commands.Cog):
+    """Towny integration for DiplomaticaMC"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+    
+    @discord.app_commands.command(name="town", description="Manage your town")
+    @discord.app_commands.describe(action="Action to perform: info, create, join, leave")
+    @discord.app_commands.describe(name="Town name (for create/join)")
+    async def town(self, interaction: discord.Interaction, action: str, name: str = None):
+        """Manage town"""
+        user_id = interaction.user.id
+        
+        if action == "info":
+            # Show town info
+            town = data_manager.get("towny", f"town_{user_id}")
+            
+            if not town:
+                await interaction.response.send_message(
+                    "❌ You're not in a town!\n"
+                    "Use `/town create <name>` to create one\n"
+                    f"Or `/town join <name>` to join an existing town",
+                    ephemeral=True
+                )
+                return
+            
+            town_balance = data_manager.get("towny", f"town_balance_{town}", 0)
+            town_members = data_manager.get("towny", f"town_members_{town}", [])
+            town_chunks = data_manager.get("towny", f"town_chunks_{town}", 1)
+            
+            embed = discord.Embed(
+                title=f"🏰 {town}",
+                description=f"Your town on DiplomaticaMC",
+                color=COLOR_GOLD,
+                timestamp=discord.utils.utcnow()
+            )
+            
+            embed.add_field(name="💰 Treasury", value=f"{town_balance} gold", inline=True)
+            embed.add_field(name="👥 Members", value=f"{len(town_members)}", inline=True)
+            embed.add_field(name="🗺️ Chunks", value=f"{town_chunks}", inline=True)
+            
+            # Show members
+            if town_members:
+                member_list = "\n".join([f"<@{m}>" for m in town_members[:10]])
+                if len(town_members) > 10:
+                    member_list += f"\n... and {len(town_members) - 10} more"
+                embed.add_field(name="👥 Town Members", value=member_list, inline=False)
+            
+            embed.set_footer(text=f"Mayor: <@{town_members[0]}>")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        elif action == "create":
+            if not name:
+                await interaction.response.send_message(
+                    "❌ Please specify a town name!\n"
+                    "Usage: `/town create <name>`",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if already in a town
+            if data_manager.get("towny", f"town_{user_id}"):
+                await interaction.response.send_message(
+                    "❌ You're already in a town! Use `/town leave` first.",
+                    ephemeral=True
+                )
+                return
+            
+            # Create town (towns are free)
+            data_manager.set("towny", f"town_{user_id}", name)
+            data_manager.set("towny", f"town_balance_{name}", 0)
+            data_manager.set("towny", f"town_members_{name}", [user_id])
+            data_manager.set("towny", f"town_chunks_{name}", 1)
+            data_manager.set("towny", f"town_created_{name}", discord.utils.utcnow().isoformat())
+            
+            embed = discord.Embed(
+                title="✅ Town Created!",
+                description=f"**{name}** has been founded!\n\nYou are now the mayor!",
+                color=COLOR_GOLD,
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="🗺️ Starting Chunks", value="1", inline=True)
+            
+            await interaction.response.send_message(embed=embed)
+            
+            # Announce in announcements channel
+            announcements = discord.utils.get(interaction.guild.text_channels, name="announcements")
+            if announcements:
+                announce_embed = discord.Embed(
+                    title="🏰 New Town Founded!",
+                    description=f"**{name}** has been founded by {interaction.user.mention}!\n\nWelcome to the nation!",
+                    color=COLOR_GOLD,
+                    timestamp=discord.utils.utcnow()
+                )
+                await announcements.send(embed=announce_embed)
+        
+        elif action == "join":
+            if not name:
+                await interaction.response.send_message(
+                    "❌ Please specify a town name!\n"
+                    "Usage: `/town join <name>`",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if already in a town
+            if data_manager.get("towny", f"town_{user_id}"):
+                await interaction.response.send_message(
+                    "❌ You're already in a town! Use `/town leave` first.",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if town exists
+            town_members = data_manager.get("towny", f"town_members_{name}")
+            if not town_members:
+                await interaction.response.send_message(
+                    f"❌ Town **{name}** doesn't exist!",
+                    ephemeral=True
+                )
+                return
+            
+            # Join town
+            town_members.append(user_id)
+            data_manager.set("towny", f"town_{user_id}", name)
+            data_manager.set("towny", f"town_members_{name}", town_members)
+            
+            embed = discord.Embed(
+                title="✅ Joined Town!",
+                description=f"You joined **{name}**!",
+                color=COLOR_GOLD,
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="👥 Total Members", value=f"{len(town_members)}", inline=True)
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        elif action == "leave":
+            town = data_manager.get("towny", f"town_{user_id}")
+            
+            if not town:
+                await interaction.response.send_message(
+                    "❌ You're not in a town!",
+                    ephemeral=True
+                )
+                return
+            
+            # Remove from town
+            town_members = data_manager.get("towny", f"town_members_{town}", [])
+            if user_id in town_members:
+                town_members.remove(user_id)
+                data_manager.set("towny", f"town_members_{town}", town_members)
+            
+            data_manager.delete("towny", f"town_{user_id}")
+            
+            await interaction.response.send_message(
+                f"✅ You left **{town}**.",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(name="nation", description="Manage your nation")
+    @discord.app_commands.describe(action="Action to perform: info, create, join, leave")
+    @discord.app_commands.describe(name="Nation name (for create/join)")
+    async def nation(self, interaction: discord.Interaction, action: str, name: str = None):
+        """Manage nation"""
+        user_id = interaction.user.id
+        
+        if action == "info":
+            # Show nation info
+            nation = data_manager.get("towny", f"nation_{user_id}")
+            
+            if not nation:
+                await interaction.response.send_message(
+                    "❌ You're not in a nation!\n"
+                    "Use `/nation create <name>` to create one",
+                    ephemeral=True
+                )
+                return
+            
+            nation_balance = data_manager.get("towny", f"nation_balance_{nation}", 0)
+            nation_towns = data_manager.get("towny", f"nation_towns_{nation}", [])
+            
+            embed = discord.Embed(
+                title=f"🌍 {nation}",
+                description=f"Your nation on DiplomaticaMC",
+                color=COLOR_BLUE,
+                timestamp=discord.utils.utcnow()
+            )
+            
+            embed.add_field(name="💰 Treasury", value=f"{nation_balance} gold", inline=True)
+            embed.add_field(name="🏰 Towns", value=f"{len(nation_towns)}", inline=True)
+            
+            if nation_towns:
+                town_list = "\n".join(nation_towns[:10])
+                if len(nation_towns) > 10:
+                    town_list += f"\n... and {len(nation_towns) - 10} more"
+                embed.add_field(name="🏰 Nation Towns", value=town_list, inline=False)
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        elif action == "create":
+            if not name:
+                await interaction.response.send_message(
+                    "❌ Please specify a nation name!\n"
+                    "Usage: `/nation create <name>`",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if already in a nation
+            if data_manager.get("towny", f"nation_{user_id}"):
+                await interaction.response.send_message(
+                    "❌ You're already in a nation!",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if user has a town
+            town = data_manager.get("towny", f"town_{user_id}")
+            if not town:
+                await interaction.response.send_message(
+                    "❌ You must be in a town to create a nation!\n"
+                    "Use `/town create <name>` first.",
+                    ephemeral=True
+                )
+                return
+            
+            # Create nation (nations are free)
+            data_manager.set("towny", f"nation_{user_id}", name)
+            data_manager.set("towny", f"nation_balance_{name}", 0)
+            data_manager.set("towny", f"nation_towns_{name}", [town])
+            data_manager.set("towny", f"nation_created_{name}", discord.utils.utcnow().isoformat())
+            
+            embed = discord.Embed(
+                title="✅ Nation Created!",
+                description=f"**{name}** has been founded!\n\nYou are now the nation leader!",
+                color=COLOR_BLUE,
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="🏰 Starting Town", value=town, inline=True)
+            
+            await interaction.response.send_message(embed=embed)
+            
+            # Announce
+            announcements = discord.utils.get(interaction.guild.text_channels, name="announcements")
+            if announcements:
+                announce_embed = discord.Embed(
+                    title="🌍 New Nation Founded!",
+                    description=f"**{name}** has been founded by {interaction.user.mention}!\n\nA new power rises!",
+                    color=COLOR_BLUE,
+                    timestamp=discord.utils.utcnow()
+                )
+                await announcements.send(embed=announce_embed)
+        
+        elif action == "join":
+            if not name:
+                await interaction.response.send_message(
+                    "❌ Please specify a nation name!",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if already in a nation
+            if data_manager.get("towny", f"nation_{user_id}"):
+                await interaction.response.send_message(
+                    "❌ You're already in a nation!",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if user has a town
+            town = data_manager.get("towny", f"town_{user_id}")
+            if not town:
+                await interaction.response.send_message(
+                    "❌ You must be in a town to join a nation!",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if nation exists
+            nation_towns = data_manager.get("towny", f"nation_towns_{name}")
+            if not nation_towns:
+                await interaction.response.send_message(
+                    f"❌ Nation **{name}** doesn't exist!",
+                    ephemeral=True
+                )
+                return
+            
+            # Join nation
+            nation_towns.append(town)
+            data_manager.set("towny", f"nation_{user_id}", name)
+            data_manager.set("towny", f"nation_towns_{name}", nation_towns)
+            
+            await interaction.response.send_message(
+                f"✅ Your town **{town}** joined **{name}**!",
+                ephemeral=True
+            )
+        
+        elif action == "leave":
+            nation = data_manager.get("towny", f"nation_{user_id}")
+            
+            if not nation:
+                await interaction.response.send_message(
+                    "❌ You're not in a nation!",
+                    ephemeral=True
+                )
+                return
+            
+            # Remove town from nation
+            town = data_manager.get("towny", f"town_{user_id}")
+            nation_towns = data_manager.get("towny", f"nation_towns_{nation}", [])
+            if town in nation_towns:
+                nation_towns.remove(town)
+                data_manager.set("towny", f"nation_towns_{nation}", nation_towns)
+            
+            data_manager.delete("towny", f"nation_{user_id}")
+            
+            await interaction.response.send_message(
+                f"✅ Your town left **{nation}**.",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(name="map", description="View the live map")
+    async def map(self, interaction: discord.Interaction):
+        """Show live map link"""
+        embed = discord.Embed(
+            title="🗺️ DiplomaticaMC Live Map",
+            description=(
+                "Explore the custom Earth map in real-time!\n\n"
+                "**Features:**\n"
+                "• Real-time player tracking\n"
+                "• Town and nation borders\n"
+                "• Capital markers\n"
+                "• Siege zones\n"
+                "• Chunk borders\n"
+                "• Mobile responsive\n\n"
+                "**[Click here to open the map](https://map.diplomaticamc.com/)**"
+            ),
+            color=COLOR_BLUE,
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_image(url="https://diplomaticamc.com/img/map-overview.jpg")
+        
+        await interaction.response.send_message(embed=embed)
+    
+    @discord.app_commands.command(name="market", description="View the live market")
+    async def market(self, interaction: discord.Interaction):
+        """Show live market link"""
+        embed = discord.Embed(
+            title="📊 DiplomaticaMC Live Market",
+            description=(
+                "Monitor the global economy in real-time!\n\n"
+                "**Features:**\n"
+                "• Live price tracking\n"
+                "• Trade volume analytics\n"
+                "• Stock levels\n"
+                "• Price trends\n"
+                "• Supply and demand\n\n"
+                "**[Click here to open the market](https://market.diplomaticamc.com/)**"
+            ),
+            color=COLOR_GOLD,
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_image(url="https://diplomaticamc.com/img/market-overview.jpg")
+        
+        await interaction.response.send_message(embed=embed)
+
+class SiegeWarCog(commands.Cog):
+    """SiegeWar integration for DiplomaticaMC"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+    
+    @discord.app_commands.command(name="siege", description="Manage sieges")
+    @discord.app_commands.describe(action="Action: status, attack, defend")
+    async def siege(self, interaction: discord.Interaction, action: str):
+        """Manage sieges"""
+        if action == "status":
+            # Show active sieges
+            sieges = data_manager.get("siegewar", "active_sieges", [])
+            
+            embed = discord.Embed(
+                title="⚔️ Active Sieges",
+                description="Current siege battles on DiplomaticaMC",
+                color=COLOR_RED,
+                timestamp=discord.utils.utcnow()
+            )
+            
+            if not sieges:
+                embed.description = "No active sieges at the moment.\n\n**SiegeWar Info:**\n• Weekend-only warfare\n• Non-destructive battles\n• Zero upkeep\n• Zero plundering"
+            else:
+                for siege in sieges:
+                    embed.add_field(
+                        name=f"⚔️ {siege['attacker']} → {siege['defender']}",
+                        value=(
+                            f"**Status:** {siege['status']}\n"
+                            f"**Started:** <t:{int(siege['timestamp'])}:R>\n"
+                            f"**Battle Points:** {siege.get('points', 0)}"
+                        ),
+                        inline=False
+                    )
+            
+            embed.set_footer(text="SiegeWar: Opt-in, non-destructive warfare")
+            
+            await interaction.response.send_message(embed=embed)
+        
+        elif action == "attack":
+            await interaction.response.send_message(
+                "⚔️ **SiegeWar Attack**\n\n"
+                "To attack a town, use the in-game command:\n"
+                "```\n"
+                "/sw attack <town_name>\n"
+                "```\n\n"
+                "**Requirements:**\n"
+                "• Must be at war with the nation\n"
+                "• Weekend-only (Saturday-Sunday)\n"
+                "• Your town must be adjacent to the target\n\n"
+                "**SiegeWar Features:**\n"
+                "• Non-destructive (no griefing)\n"
+                "• Zero upkeep costs\n"
+                "• Zero plundering\n"
+                "• Strategic weekend battles",
+                ephemeral=True
+            )
+        
+        elif action == "defend":
+            await interaction.response.send_message(
+                "🛡️ **SiegeWar Defense**\n\n"
+                "To defend your town, use the in-game command:\n"
+                "```\n"
+                "/sw defend\n"
+                "```\n\n"
+                "**Defense Tips:**\n"
+                "• Gather your town members\n"
+                "• Stock up on gear and potions\n"
+                "• Coordinate with allies\n"
+                "• Use the terrain to your advantage\n\n"
+                "**Remember:** SiegeWar is non-destructive, so your buildings are safe!",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(name="war-status", description="View current war status")
+    async def war_status(self, interaction: discord.Interaction):
+        """View war status"""
+        wars = data_manager.get("diplomacy", "wars", [])
+        active_wars = [w for w in wars if w.get("status") == "active"]
+        
+        embed = discord.Embed(
+            title="⚔️ Current Wars",
+            description="Active conflicts on DiplomaticaMC",
+            color=COLOR_RED,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        if not active_wars:
+            embed.description = "🕊️ **Peace!**\n\nNo active wars at the moment.\n\nAll nations are at peace."
+        else:
+            for war in active_wars:
+                embed.add_field(
+                    name=f"⚔️ {war['attacker']} vs {war['defender']}",
+                    value=(
+                        f"**Reason:** {war.get('reason', 'Unknown')}\n"
+                        f"**Declared:** <t:{int(war.get('timestamp', 0))}:R>\n"
+                        f"**Status:** {war.get('status', 'active')}"
+                    ),
+                    inline=False
+                )
+        
+        await interaction.response.send_message(embed=embed)
+
+class InactivityCog(commands.Cog):
+    """Inactivity tracking for DiplomaticaMC"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+        self.inactivity_check.start()
+    
+    def cog_unload(self):
+        self.inactivity_check.cancel()
+    
+    @tasks.loop(hours=24)
+    async def inactivity_check(self):
+        """Check for inactive players daily"""
+        now = discord.utils.utcnow().timestamp()
+        
+        # Get all players
+        players = data_manager.get_all_keys("activity")
+        
+        for player_key in players:
+            if player_key.startswith("last_seen_"):
+                user_id = int(player_key.replace("last_seen_", ""))
+                last_seen = data_manager.get("activity", player_key, now)
+                
+                days_inactive = (now - last_seen) / 86400
+                
+                # Warn at 50 days
+                if days_inactive >= INACTIVITY_WARNING_DAYS and days_inactive < INACTIVITY_WARNING_DAYS + 1:
+                    warned = data_manager.get("activity", f"warned_{user_id}", False)
+                    if not warned:
+                        try:
+                            user = await self.bot.fetch_user(user_id)
+                            remaining = int(INACTIVITY_DELETION_DAYS - days_inactive)
+                            
+                            await user.send(
+                                f"⚠️ **Inactivity Warning**\n\n"
+                                f"You haven't been active on DiplomaticaMC for **{int(days_inactive)}** days.\n\n"
+                                f"**Your Towny data will be deleted in {remaining} days** if you don't log in.\n\n"
+                                f"To keep your town/nation, please log in to the server!\n\n"
+                                f"IP: `diplomaticamc.com`"
+                            )
+                            
+                            data_manager.set("activity", f"warned_{user_id}", True)
+                        except:
+                            pass
+                
+                # Delete at 60 days
+                elif days_inactive >= INACTIVITY_DELETION_DAYS:
+                    # Delete towny data
+                    town = data_manager.get("towny", f"town_{user_id}")
+                    if town:
+                        # Remove from town
+                        town_members = data_manager.get("towny", f"town_members_{town}", [])
+                        if user_id in town_members:
+                            town_members.remove(user_id)
+                            data_manager.set("towny", f"town_members_{town}", town_members)
+                        
+                        # Delete town if empty
+                        if not town_members:
+                            data_manager.delete("towny", f"town_{town}")
+                            data_manager.delete("towny", f"town_balance_{town}")
+                            data_manager.delete("towny", f"town_chunks_{town}")
+                    
+                    # Remove from nation
+                    nation = data_manager.get("towny", f"nation_{user_id}")
+                    if nation:
+                        data_manager.delete("towny", f"nation_{user_id}")
+                    
+                    # Clear activity data
+                    data_manager.delete("activity", f"last_seen_{user_id}")
+                    data_manager.delete("activity", f"warned_{user_id}")
+    
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Track activity on message"""
+        if message.author.bot:
+            return
+        
+        user_id = message.author.id
+        now = discord.utils.utcnow().timestamp()
+        
+        data_manager.set("activity", f"last_seen_{user_id}", now)
+        data_manager.delete("activity", f"warned_{user_id}")  # Reset warning
+    
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Track activity on voice"""
+        if before.channel is None and after.channel is not None:
+            # Joined voice
+            user_id = member.id
+            now = discord.utils.utcnow().timestamp()
+            
+            data_manager.set("activity", f"last_seen_{user_id}", now)
+            data_manager.delete("activity", f"warned_{user_id}")
+
+class FunCog(commands.Cog):
+    """Fun features"""
+    
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+    
+    @discord.app_commands.command(name="funfact", description=f"Get a fun fact about {NATION_NAME}")
+    async def funfact(self, interaction: discord.Interaction):
+        """Get a fun fact"""
+        import random
+        from config import FUN_FACTS
+        
+        lang = i18n.get_user_lang(interaction.user.id)
+        facts = FUN_FACTS.get(lang, FUN_FACTS["en"])
+        fact = random.choice(facts)
+        
+        embed = discord.Embed(
+            title=f"{NATION_FLAG} Did You Know?",
+            description=fact,
+            color=COLOR_GOLD
+        )
+        
+        await interaction.response.send_message(embed=embed)
+
+class MentionCog(commands.Cog):
+    """Answers @Castro mentions with helpful pointers"""
+
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Reply to @Castro mentions (never to bots or to replies aimed at the bot)"""
+        if message.author.bot:
+            return
+        if not self.bot.user or self.bot.user not in message.mentions:
+            return
+
+        # Do not answer a reply to the bot - avoids ping-pong loops
+        referenced = message.reference.resolved if message.reference else None
+        if isinstance(referenced, discord.Message) and referenced.author.id == self.bot.user.id:
+            return
+
+        content = message.content.lower()
+
+        def has(*words: str) -> bool:
+            return any(re.search(rf"\b{word}\b", content) for word in words)
+
+        if has("vote", "party", "link", "how"):
+            text = self._how_to_vote_text()
+        elif has("ticket"):
+            text = (
+                "🎫 **Support tickets** — use `/ticket` to open a private support ticket. "
+                "Staff will pick it up there; use the close button in the ticket when it's resolved."
+            )
+        elif has("help"):
+            text = self._help_text()
+        else:
+            text = self._hello_text()
+
+        try:
+            await message.reply(
+                text,
+                mention_author=False,
+                allowed_mentions=discord.AllowedMentions.none()
+            )
+        except discord.Forbidden:
+            logger.warning(
+                f"Cannot reply to {message.author} in #{getattr(message.channel, 'name', '?')}: "
+                "missing Send Messages permission there"
+            )
+        except discord.HTTPException as e:
+            logger.warning(f"Failed to reply to mention: {e}")
+
+    def _hello_text(self) -> str:
+        return (
+            f"{NATION_FLAG} ¡Hola! I'm {BOT_NAME}, the {NATION_NAME} bot.\n"
+            f"🗳️ **{self.bot.remaining}** votes left until the next vote party.\n"
+            "• `/party` — vote party status\n"
+            "• `/link <ign>` — link your Minecraft username\n"
+            "• `/funfact` — a fact about Cuba"
+        )
+
+    def _how_to_vote_text(self) -> str:
+        if self.bot.tracker_message:
+            tracker = f"Open the vote tracker: {self.bot.tracker_message.jump_url}"
+        else:
+            tracker = "Open the vote tracker with `/party`"
+
+        return (
+            "🗳️ **How to vote**\n"
+            f"{tracker}\n"
+            "Vote on every site listed there, then come back.\n"
+            "🔗 Link your Minecraft username with `/link <ign>` "
+            "(example: `/link Notch`), then click **✅ I Voted!** to claim your vote."
+        )
+
+    def _help_text(self) -> str:
+        return (
+            f"🇨🇺 **{BOT_NAME} — {NATION_NAME} commands**\n"
+            "• `/party` — vote party status\n"
+            "• `/link <ign>` — link your Minecraft username\n"
+            "• `/myvotes` — your votes and streak\n"
+            "• `/leaderboard` — top voters this cycle\n"
+            "• `/funfact` — a fact about Cuba\n"
+            "• `/role-request` — citizenship / ally / diplomat requests\n"
+            "• `/ticket` — open a support ticket\n\n"
+            "🛠️ **Admin:** `/voteparty setup`, `setremaining`, `setbaseline`, "
+            "`forceupdate`, `fixbaseline`, `scraperstats`, `reset`"
+        )
+
+
+class TicketCog(commands.Cog):
+    """Minimal support ticket system"""
+
+    def __init__(self, bot: CastroBot):
+        self.bot = bot
+
+    @discord.app_commands.command(name="ticket", description="Open a private support ticket")
+    async def ticket(self, interaction: discord.Interaction):
+        """Open a private ticket channel for a member"""
+        guild = interaction.guild
+        user = interaction.user
+        lang = i18n.get_user_lang(user.id)
+
+        existing_id = data_manager.get("tickets", f"open_{user.id}")
+        if existing_id:
+            existing = guild.get_channel(existing_id)
+            if existing:
+                await interaction.response.send_message(
+                    f"{i18n.get('ticket_already_open', lang)} {existing.mention}",
+                    ephemeral=True,
+                )
+                return
+            data_manager.delete("tickets", f"open_{user.id}")
+
+        category = discord.utils.get(guild.categories, name=TICKET_CATEGORY_NAME)
+        staff_role = discord.utils.get(guild.roles, name=TICKET_STAFF_ROLE)
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            user: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True, attach_files=True
+            ),
+            guild.me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True, manage_channels=True
+            ),
+        }
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True, manage_messages=True
+            )
+
+        try:
+            channel = await guild.create_text_channel(
+                name=f"ticket-{user.name}"[:100],
+                category=category,
+                overwrites=overwrites,
+                reason=f"Support ticket opened by {user}",
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Could not create the ticket: {e}",
+                ephemeral=True,
+            )
+            return
+
+        data_manager.set("tickets", f"open_{user.id}", channel.id)
+
+        embed = discord.Embed(
+            title=i18n.get("ticket_title", lang),
+            description=f"{user.mention} — {i18n.get('ticket_created', lang)}",
+            color=BOT_COLOR,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.add_field(
+            name="Next step",
+            value="Describe your issue here. If it is about your Minecraft account, include your IGN.",
+            inline=False,
+        )
+        if staff_role:
+            embed.add_field(name="Staff", value=staff_role.mention, inline=False)
+
+        await channel.send(embed=embed, view=TicketCloseView(self.bot, user.id))
+        await interaction.response.send_message(f"✅ Ticket opened: {channel.mention}", ephemeral=True)
+
+
+class TicketCloseView(discord.ui.View):
+    """Close button shown inside a support ticket"""
+
+    def __init__(self, bot: CastroBot, owner_id: int):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.owner_id = owner_id
+
+    @discord.ui.button(
+        label="🔒 Close Ticket",
+        style=discord.ButtonStyle.danger,
+        custom_id="ticket_close_button",
+        row=0,
+    )
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Close and delete the ticket channel"""
+        staff_role = discord.utils.get(interaction.guild.roles, name=TICKET_STAFF_ROLE)
+        is_staff = bool(staff_role and staff_role in getattr(interaction.user, "roles", []))
+
+        if interaction.user.id != self.owner_id and not is_staff:
+            await interaction.response.send_message(
+                "❌ Only the ticket owner or staff can close this ticket.",
+                ephemeral=True,
+            )
+            return
+
+        data_manager.delete("tickets", f"open_{self.owner_id}")
+        lang = i18n.get_user_lang(interaction.user.id)
+        await interaction.response.send_message(
+            i18n.get("ticket_closed", lang, user=interaction.user.mention),
+            ephemeral=True,
+        )
+
+        await asyncio.sleep(2)
+        try:
+            await interaction.channel.delete(reason=f"Ticket closed by {interaction.user}")
+        except Exception as e:
+            logger.warning(f"Failed to delete ticket channel: {e}")
+
+
+
+
+# ─── Views ────────────────────────────────────────────────────────────────────
+
+class VoteNotifyView(discord.ui.View):
+    """Vote party buttons"""
+    
+    def __init__(self, bot: CastroBot):
+        super().__init__(timeout=None)
+        self.bot = bot
+    
+    @discord.ui.button(
+        label="✅ I Voted!",
+        style=discord.ButtonStyle.success,
+        custom_id="vote_claim_button",
+        row=0
+    )
+    async def vote_claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Vote claim button - handled by cog"""
+        pass
+    
+    @discord.ui.button(
+        label="🔔 Get Notified",
+        style=discord.ButtonStyle.primary,
+        custom_id="vote_notify_toggle",
+        row=0
+    )
+    async def notify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Notify toggle button - handled by cog"""
+        pass
+
+    @discord.ui.button(
+        label="⏰ Remind Me",
+        style=discord.ButtonStyle.secondary,
+        custom_id="vote_remind_button",
+        row=1
+    )
+    async def remind_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Remind-me button - handled by cog"""
+        pass
+
+    @discord.ui.button(
+        label="📖 How to Vote",
+        style=discord.ButtonStyle.secondary,
+        custom_id="vote_howto_button",
+        row=2
+    )
+    async def howto_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """How-to-vote button - handled by cog"""
+        pass
+
+    @discord.ui.button(
+        label="🏆 Leaderboard",
+        style=discord.ButtonStyle.secondary,
+        custom_id="vote_leaderboard_button",
+        row=2
+    )
+    async def leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Leaderboard button - handled by cog"""
+        pass
+
+class WelcomeOnboardingView(discord.ui.View):
+    """Interactive onboarding view for new members"""
+    
+    def __init__(self, bot: CastroBot, new_member: discord.Member):
+        super().__init__(timeout=86400)  # 24 hours
+        self.bot = bot
+        self.new_member = new_member
+    
+    @discord.ui.button(
+        label="📜 Read Rules",
+        style=discord.ButtonStyle.secondary,
+        custom_id="welcome_read_rules",
+        row=0
+    )
+    async def read_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show rules"""
+        rules_channel = discord.utils.get(interaction.guild.text_channels, name="rules")
+        if rules_channel:
+            await interaction.response.send_message(
+                f"📜 Check out the rules in {rules_channel.mention}!",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "📜 Please read the server rules!",
+                ephemeral=True
+            )
+    
+    @discord.ui.button(
+        label="🏠 Request Citizenship",
+        style=discord.ButtonStyle.primary,
+        custom_id="welcome_request_citizenship",
+        row=0
+    )
+    async def request_citizenship(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Request citizenship"""
+        if interaction.user.id != self.new_member.id:
+            await interaction.response.send_message(
+                "❌ This button is only for the new member!",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_modal(CitizenshipModal(self.bot))
+    
+    @discord.ui.button(
+        label="💬 Introduce Yourself",
+        style=discord.ButtonStyle.success,
+        custom_id="welcome_introduce",
+        row=1
+    )
+    async def introduce(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to introductions"""
+        intro_channel = discord.utils.get(interaction.guild.text_channels, name="introductions")
+        if intro_channel:
+            await interaction.response.send_message(
+                f"💬 Introduce yourself in {intro_channel.mention}!\n\n"
+                "**Template:**\n"
+                "• Name/Age\n"
+                "• Where you're from\n"
+                "• What brought you here\n"
+                "• Your interests",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "💬 Say hello in the chat!",
+                ephemeral=True
+            )
+    
+    @discord.ui.button(
+        label="🎁 Claim Welcome Gift",
+        style=discord.ButtonStyle.secondary,
+        custom_id="welcome_claim_gift",
+        row=1
+    )
+    async def claim_gift(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Claim welcome gift"""
+        if interaction.user.id != self.new_member.id:
+            await interaction.response.send_message(
+                "❌ This button is only for the new member!",
+                ephemeral=True
+            )
+            return
+        
+        # Check if already claimed
+        if data_manager.get("welcome_gifts", str(interaction.user.id)):
+            await interaction.response.send_message(
+                "❌ You've already claimed your welcome gift!",
+                ephemeral=True
+            )
+            return
+        
+        # Award gift
+        data_manager.set("welcome_gifts", str(interaction.user.id), True)
+        
+        # Give verified role
+        verified_role = discord.utils.get(interaction.guild.roles, name=VERIFIED_ROLE)
+        if verified_role and verified_role not in interaction.user.roles:
+            await interaction.user.add_roles(verified_role)
+        
+        await interaction.response.send_message(
+            "🎁 **Welcome Gift Claimed!**\n\n"
+            "• ✅ Verified role\n"
+            f"• 🎉 Welcome to {NATION_NAME}!\n\n"
+            "Start exploring and have fun!",
+            ephemeral=True
+        )
+
+class RoleRequestView(discord.ui.View):
+    """Advanced role request system with multi-step verification"""
+    
+    def __init__(self, bot: CastroBot):
+        super().__init__(timeout=None)
+        self.bot = bot
+    
+    @discord.ui.button(
+        label="🏠 Request Citizenship",
+        style=discord.ButtonStyle.primary,
+        custom_id="request_citizenship",
+        row=0
+    )
+    async def citizenship_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Request citizenship with full verification"""
+        # Check if already has citizenship
+        nation_role = discord.utils.get(interaction.guild.roles, name=NATION_MEMBER_ROLE)
+        if nation_role and nation_role in interaction.user.roles:
+            await interaction.response.send_message(
+                f"✅ You're already a citizen of {NATION_NAME}!",
+                ephemeral=True
+            )
+            return
+        
+        # Check if pending request exists
+        pending = data_manager.get("role_requests", f"citizenship_{interaction.user.id}")
+        if pending and pending.get("status") == "pending":
+            await interaction.response.send_message(
+                "⏳ You already have a pending citizenship request!\n"
+                "Please wait for leadership to review it.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_modal(CitizenshipModal(self.bot))
+    
+    @discord.ui.button(
+        label="🤝 Request Ally Status",
+        style=discord.ButtonStyle.secondary,
+        custom_id="request_ally",
+        row=0
+    )
+    async def ally_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Request ally status"""
+        ally_role = discord.utils.get(interaction.guild.roles, name=ALLY_ROLE)
+        if ally_role and ally_role in interaction.user.roles:
+            await interaction.response.send_message(
+                "✅ You already have Ally status!",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_modal(AllyModal(self.bot))
+    
+    @discord.ui.button(
+        label="🌐 Foreign Diplomat",
+        style=discord.ButtonStyle.secondary,
+        custom_id="request_diplomat",
+        row=0
+    )
+    async def diplomat_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Request diplomat status"""
+        await interaction.response.send_modal(DiplomatModal(self.bot))
+    
+    @discord.ui.button(
+        label="🔔 Toggle Vote Party Pings",
+        style=discord.ButtonStyle.success,
+        custom_id="toggle_vp_pings",
+        row=1
+    )
+    async def vp_pings_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Toggle VP pings"""
+        member = interaction.user
+        vp_role = discord.utils.get(interaction.guild.roles, name=VP_ROLE)
+        
+        if not vp_role:
+            await interaction.response.send_message(
+                "❌ The 'VP' role was not found.",
+                ephemeral=True
+            )
+            return
+        
+        try:
+            if vp_role in member.roles:
+                await member.remove_roles(vp_role)
+                await interaction.response.send_message(
+                    "✅ You will **no longer** be notified for vote party updates.",
+                    ephemeral=True
+                )
+            else:
+                await member.add_roles(vp_role)
+                await interaction.response.send_message(
+                    "✅ You will now be **notified** when the vote party is close!",
+                    ephemeral=True
+                )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Error: {e}",
+                ephemeral=True
+            )
+
+class CitizenshipModal(discord.ui.Modal, title="🏠 Citizenship Application"):
+    """Advanced citizenship application with verification"""
+    
+    ign = discord.ui.TextInput(
+        label="Minecraft Username (IGN)",
+        placeholder="Your exact in-game name",
+        min_length=3,
+        max_length=16,
+        required=True
+    )
+    
+    nation = discord.ui.TextInput(
+        label="Current Nation",
+        placeholder="What nation are you from? (or 'None')",
+        required=True
+    )
+    
+    town = discord.ui.TextInput(
+        label="Desired Town",
+        placeholder="Which town do you want to join?",
+        required=True
+    )
+    
+    role = discord.ui.TextInput(
+        label="Desired Role",
+        placeholder="What role do you want? (Citizen, Merchant, etc.)",
+        required=True
+    )
+    
+    experience = discord.ui.TextInput(
+        label="Why should we accept you?",
+        placeholder=f"Tell us about yourself and why you want to join {NATION_NAME}...",
+        style=discord.TextStyle.paragraph,
+        min_length=50,
+        max_length=1000,
+        required=True
+    )
+    
+    def __init__(self, bot: CastroBot):
+        super().__init__()
+        self.bot = bot
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle citizenship application"""
+        # Create application
+        application = {
+            "user_id": interaction.user.id,
+            "username": str(interaction.user),
+            "ign": self.ign.value,
+            "nation": self.nation.value,
+            "town": self.town.value,
+            "role": self.role.value,
+            "experience": self.experience.value,
+            "status": "pending",
+            "timestamp": discord.utils.utcnow().isoformat(),
+            "reviewers": []
+        }
+        
+        # Save application
+        data_manager.set("role_requests", f"citizenship_{interaction.user.id}", application)
+        
+        # Create review embed
+        review_embed = discord.Embed(
+            title="🏠 New Citizenship Application",
+            description=f"**Applicant:** {interaction.user.mention}\n**Status:** ⏳ Pending Review",
+            color=COLOR_GOLD,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        review_embed.add_field(name="🎮 Minecraft IGN", value=self.ign.value, inline=True)
+        review_embed.add_field(name="🌍 Current Nation", value=self.nation.value, inline=True)
+        review_embed.add_field(name="🏘️ Desired Town", value=self.town.value, inline=True)
+        review_embed.add_field(name="👔 Desired Role", value=self.role.value, inline=True)
+        review_embed.add_field(name="📝 Experience", value=self.experience.value[:1000], inline=False)
+        
+        # Create review buttons
+        review_view = ApplicationReviewView(self.bot, interaction.user.id, "citizenship")
+        
+        # Send to leadership channel
+        leadership_channel = discord.utils.get(interaction.guild.text_channels, name="leadership")
+        if leadership_channel:
+            await leadership_channel.send(
+                content="🚨 **New Citizenship Application** <@&LEADERSHIP_ROLE_ID>",
+                embed=review_embed,
+                view=review_view
+            )
+        
+        await interaction.response.send_message(
+            "✅ **Application Submitted!**\n\n"
+            "Your citizenship application has been sent to leadership for review.\n"
+            "You'll be notified once a decision is made.\n\n"
+            "**Application Details:**\n"
+            f"• IGN: {self.ign.value}\n"
+            f"• Town: {self.town.value}\n"
+            f"• Role: {self.role.value}\n\n"
+            f"Good luck, and welcome to {NATION_NAME}! {NATION_FLAG}",
+            ephemeral=True
+        )
+
+class DiplomatModal(discord.ui.Modal, title="🌐 Diplomat Application"):
+    """Foreign diplomat application"""
+    
+    nation = discord.ui.TextInput(
+        label="Your Nation",
+        placeholder="What nation do you represent?",
+        required=True
+    )
+    
+    position = discord.ui.TextInput(
+        label="Your Position",
+        placeholder="e.g., Ambassador, Foreign Minister",
+        required=True
+    )
+    
+    purpose = discord.ui.TextInput(
+        label="Purpose of Visit",
+        placeholder="Why are you here? (Trade, Alliance, etc.)",
+        style=discord.TextStyle.paragraph,
+        min_length=50,
+        max_length=1000,
+        required=True
+    )
+    
+    def __init__(self, bot: CastroBot):
+        super().__init__()
+        self.bot = bot
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle diplomat application"""
+        application = {
+            "user_id": interaction.user.id,
+            "username": str(interaction.user),
+            "nation": self.nation.value,
+            "position": self.position.value,
+            "purpose": self.purpose.value,
+            "status": "pending",
+            "timestamp": discord.utils.utcnow().isoformat()
+        }
+        
+        data_manager.set("role_requests", f"diplomat_{interaction.user.id}", application)
+        
+        # Create review embed
+        review_embed = discord.Embed(
+            title="🌐 New Diplomat Application",
+            description=f"**Diplomat:** {interaction.user.mention}\n**Nation:** {self.nation.value}",
+            color=COLOR_BLUE,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        review_embed.add_field(name="👔 Position", value=self.position.value, inline=True)
+        review_embed.add_field(name="📋 Purpose", value=self.purpose.value[:500], inline=False)
+        
+        # Send to foreign affairs channel
+        fa_channel = discord.utils.get(interaction.guild.text_channels, name="foreign-affairs")
+        if fa_channel:
+            review_view = ApplicationReviewView(self.bot, interaction.user.id, "diplomat")
+            await fa_channel.send(
+                content="🌐 **New Diplomat Application**",
+                embed=review_embed,
+                view=review_view
+            )
+        
+        await interaction.response.send_message(
+            "✅ **Diplomat Application Submitted!**\n\n"
+            "Your application has been sent to Foreign Affairs.\n"
+            "They will contact you soon.\n\n"
+            f"• Nation: {self.nation.value}\n"
+            f"• Position: {self.position.value}\n\n"
+            "¡Bienvenido diplomático! 🌐",
+            ephemeral=True
+        )
+
+class ApplicationReviewView(discord.ui.View):
+    """View for reviewing applications"""
+    
+    def __init__(self, bot: CastroBot, applicant_id: int, app_type: str):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.applicant_id = applicant_id
+        self.app_type = app_type
+    
+    @discord.ui.button(
+        label="✅ Approve",
+        style=discord.ButtonStyle.success,
+        custom_id="approve_application"
+    )
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Approve application"""
+        # Check permissions
+        leadership_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only leadership can approve applications!",
+                ephemeral=True
+            )
+            return
+        
+        # Get application
+        app_key = f"{self.app_type}_{self.applicant_id}"
+        application = data_manager.get("role_requests", app_key)
+        
+        if not application:
+            await interaction.response.send_message(
+                "❌ Application not found!",
+                ephemeral=True
+            )
+            return
+        
+        # Update status
+        application["status"] = "approved"
+        application["reviewed_by"] = interaction.user.id
+        application["reviewed_at"] = discord.utils.utcnow().isoformat()
+        data_manager.set("role_requests", app_key, application)
+        
+        # Assign role
+        applicant = interaction.guild.get_member(self.applicant_id)
+        if applicant:
+            if self.app_type == "citizenship":
+                role = discord.utils.get(interaction.guild.roles, name=NATION_MEMBER_ROLE)
+            elif self.app_type == "diplomat":
+                role = discord.utils.get(interaction.guild.roles, name="Diplomat")
+            else:
+                role = discord.utils.get(interaction.guild.roles, name=ALLY_ROLE)
+            
+            if role:
+                await applicant.add_roles(role)
+                
+                # Notify applicant
+                try:
+                    await applicant.send(
+                        f"🎉 **Application Approved!**\n\n"
+                        f"Your {self.app_type} application has been approved!\n"
+                        f"You now have the **{role.name}** role.\n\n"
+                        f"Welcome to {NATION_NAME}! {NATION_FLAG}"
+                    )
+                except:
+                    pass
+        
+        # Update embed
+        interaction.message.embeds[0].color = discord.Color.green()
+        interaction.message.embeds[0].description = (
+            f"**Applicant:** <@{self.applicant_id}>\n"
+            f"**Status:** ✅ Approved by {interaction.user.mention}"
+        )
+        
+        await interaction.message.edit(embed=interaction.message.embeds[0], view=None)
+        await interaction.response.send_message(
+            f"✅ Application approved! {applicant.mention if applicant else 'Applicant'} has been notified.",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(
+        label="❌ Deny",
+        style=discord.ButtonStyle.danger,
+        custom_id="deny_application"
+    )
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Deny application"""
+        # Check permissions
+        leadership_role = discord.utils.get(interaction.guild.roles, name=LEADERSHIP_ROLE)
+        if leadership_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only leadership can deny applications!",
+                ephemeral=True
+            )
+            return
+        
+        # Get application
+        app_key = f"{self.app_type}_{self.applicant_id}"
+        application = data_manager.get("role_requests", app_key)
+        
+        if not application:
+            await interaction.response.send_message(
+                "❌ Application not found!",
+                ephemeral=True
+            )
+            return
+        
+        # Update status
+        application["status"] = "denied"
+        application["reviewed_by"] = interaction.user.id
+        application["reviewed_at"] = discord.utils.utcnow().isoformat()
+        data_manager.set("role_requests", app_key, application)
+        
+        # Notify applicant
+        applicant = interaction.guild.get_member(self.applicant_id)
+        if applicant:
+            try:
+                await applicant.send(
+                    f"❌ **Application Denied**\n\n"
+                    f"Your {self.app_type} application has been denied.\n"
+                    f"You may reapply in 7 days.\n\n"
+                    f"If you have questions, please contact staff."
+                )
+            except:
+                pass
+        
+        # Update embed
+        interaction.message.embeds[0].color = discord.Color.red()
+        interaction.message.embeds[0].description = (
+            f"**Applicant:** <@{self.applicant_id}>\n"
+            f"**Status:** ❌ Denied by {interaction.user.mention}"
+        )
+        
+        await interaction.message.edit(embed=interaction.message.embeds[0], view=None)
+        await interaction.response.send_message(
+            "❌ Application denied. Applicant has been notified.",
+            ephemeral=True
+        )
+
+class AllyModal(discord.ui.Modal, title="Request Ally Status"):
+    """Ally request modal"""
+    
+    nation = discord.ui.TextInput(
+        label="Your Nation",
+        placeholder="What nation do you represent?",
+        required=True
+    )
+    
+    leader = discord.ui.TextInput(
+        label="Nation Leader",
+        placeholder="Who is your nation's leader?",
+        required=True
+    )
+    
+    def __init__(self, bot: CastroBot):
+        super().__init__()
+        self.bot = bot
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle modal submission"""
+        # TODO: Send to leadership review channel
+        await interaction.response.send_message(
+            "✅ Your ally request has been submitted! Leadership will review it soon.",
+            ephemeral=True
+        )
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    """Main entry point"""
+    token = os.environ.get("DISCORD_BOT_TOKEN")
+    
+    if not token:
+        logger.error("=" * 60)
+        logger.error("DISCORD_BOT_TOKEN environment variable not set!")
+        logger.error("Please set it before running:")
+        logger.error("  export DISCORD_BOT_TOKEN='your_token_here'")
+        logger.error("=" * 60)
+        return
+    
+    # Supervisor: a failed gateway handshake (e.g. Discord 525) crashes discord.py,
+    # so retry with a fresh client instead of leaving the process dead.
+    while True:
+        bot = CastroBot()
+        try:
+            bot.run(token, log_handler=None)
+            return
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            logger.error(f"Bot stopped unexpectedly: {e}", exc_info=True)
+            logger.info("Reconnecting with a fresh client in 30 seconds...")
+            time.sleep(30)
+
+if __name__ == "__main__":
+    main()
