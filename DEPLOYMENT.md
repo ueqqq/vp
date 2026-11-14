@@ -4,7 +4,7 @@
 
 ```bash
 git add .
-git commit -m "🇨🇴 Nariño Bot - Ultimate Colombia Nation Bot"
+git commit -m "🇨🇺 Castro - Cuba Nation Bot"
 git push
 ```
 
@@ -23,9 +23,9 @@ git push
 
 In Discord, you should see:
 ```
-✓ Logged in as Nariño#XXXX
+✓ Logged in as Castro#XXXX
 ✓ Connected to X guild(s)
-✓ Nariño v1.0.0 is ready!
+✓ Castro v1.1.0 is ready!
 ```
 
 ## Step 4: Initial Setup
@@ -75,7 +75,7 @@ In the channel where you want the vote tracker:
 2. Verify welcome message appears in #welcome channel
 
 ### Economy
-1. Run `/balance` - should show 100 Pesos
+1. Run `/balance` - should show 0 Gold for a new player
 2. Run `/daily` - should give daily reward
 3. Run `/work` - should earn money
 
@@ -135,4 +135,4 @@ Check:
 
 **🎉 You're ready to go!**
 
-¡Bienvenido a Colombia! 🇨🇴 🌴
+¡Bienvenido a Cuba! 🇨🇺 🌴

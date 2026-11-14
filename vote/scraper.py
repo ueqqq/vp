@@ -11,10 +11,10 @@ from typing import Optional, Dict, List, Tuple
 from datetime import datetime, timedelta
 import logging
 
-from config import VOTE_SITES, SCRAPE_INTERVAL_SECONDS
+from config import BOT_NAME, VOTE_SITES, SCRAPE_INTERVAL_SECONDS
 from core.data_manager import data_manager
 
-logger = logging.getLogger("Nariño")
+logger = logging.getLogger(BOT_NAME)
 
 class AdvancedVoteScraper:
     """Advanced vote scraper with multiple strategies and analytics"""

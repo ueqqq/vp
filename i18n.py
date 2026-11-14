@@ -2,6 +2,7 @@
 Internationalization (i18n) module for Spanish + English support.
 """
 
+from config import NATION_FLAG, NATION_NAME
 from typing import Optional
 
 # ─── Translation Strings ──────────────────────────────────────────────────────
@@ -9,7 +10,7 @@ from typing import Optional
 STRINGS = {
     "en": {
         # Embed
-        "embed_title": "🇨🇴 Colombia Vote Party",
+        "embed_title": "{flag} {nation} Vote Party",
         "votes_remaining": "**{remaining}** votes remaining",
         "votes_collected": "{progress} / {VOTE_GOAL} votes collected",
         "vote_counts": "🗳️ **Vote Counts**",
@@ -28,7 +29,7 @@ STRINGS = {
         "status_started": "🗳️ **Vote party in progress**",
 
         # Celebration
-        "celebration_title": "🎉 🇨🇴 VOTE PARTY COMPLETE! 🇨🇴 🎉",
+        "celebration_title": "🎉 {flag} {nation} VOTE PARTY COMPLETE! {flag} 🎉",
         "celebration_desc": "The community reached **{goal} votes**! Time for the party!",
         "celebration_stats": "⏱️ Completed in **{time}**\n📊 Voting speed: **{speed} votes/hour**",
         "celebration_new_cycle": "New cycle starting...",
@@ -56,11 +57,11 @@ STRINGS = {
 
         # Reminder
         "reminder_set": "⏰ I'll remind you in **30 minutes** to vote!",
-        "reminder_message": "🔔 **Reminder!** The Colombia Vote Party is still going!\n{remaining} votes remaining. Come vote now!",
+        "reminder_message": "🔔 **Reminder!** The {nation} Vote Party is still going!\n{remaining} votes remaining. Come vote now!",
         "reminder_cooldown": "⏳ You already have a reminder set. Try again in **{time}**.",
 
         # How to vote
-        "how_to_title": "📖 How to Vote for Colombia",
+        "how_to_title": "📖 How to Vote for {nation}",
         "how_to_desc": "Follow these steps to help us reach the vote party goal!",
         "how_to_step1": "**1.** Click the vote links in the tracker embed above.",
         "how_to_step2": "**2.** Complete the captcha on the voting site.",
@@ -77,7 +78,7 @@ STRINGS = {
         "lb_your_rank": "📍 Your rank: **#{rank}** ({votes} votes)",
 
         # Stats
-        "stats_title": "📊 Colombia Vote Party Stats",
+        "stats_title": "📊 {nation} Vote Party Stats",
         "stats_parties": "🎉 Parties Completed",
         "stats_avg_time": "⏱️ Average Completion",
         "stats_fastest": "⚡ Fastest Party",
@@ -121,7 +122,7 @@ STRINGS = {
 
     "es": {
         # Embed
-        "embed_title": "🇨🇴 Fiesta de Votos Colombia",
+        "embed_title": "{flag} Fiesta de Votos de {nation}",
         "votes_remaining": "**{remaining}** votos restantes",
         "votes_collected": "{progress} / {VOTE_GOAL} votos recogidos",
         "vote_counts": "🗳️ **Conteo de Votos**",
@@ -140,7 +141,7 @@ STRINGS = {
         "status_started": "🗳️ **Fiesta de votos en progreso**",
 
         # Celebration
-        "celebration_title": "🎉 🇨🇴 ¡FIESTA DE VOTOS COMPLETA! 🇨🇴 🎉",
+        "celebration_title": "🎉 {flag} ¡FIESTA DE VOTOS DE {nation} COMPLETA! {flag} 🎉",
         "celebration_desc": "¡La comunidad alcanzó **{goal} votos**! ¡Hora de la fiesta!",
         "celebration_stats": "⏱️ Completado en **{time}**\n📊 Velocidad: **{speed} votos/hora**",
         "celebration_new_cycle": "Nuevo ciclo iniciando...",
@@ -168,11 +169,11 @@ STRINGS = {
 
         # Reminder
         "reminder_set": "⏰ ¡Te recordaré en **30 minutos** para votar!",
-        "reminder_message": "🔔 **¡Recordatorio!** ¡La Fiesta de Votos de Colombia sigue!\n{remaining} votos restantes. ¡Ven a votar!",
+        "reminder_message": "🔔 **¡Recordatorio!** ¡La Fiesta de Votos de {nation} sigue!\n{remaining} votos restantes. ¡Ven a votar!",
         "reminder_cooldown": "⏳ Ya tienes un recordatorio activo. Intenta en **{time}**.",
 
         # How to vote
-        "how_to_title": "📖 Cómo Votar por Colombia",
+        "how_to_title": "📖 Cómo Votar por {nation}",
         "how_to_desc": "¡Sigue estos pasos para ayudarnos a alcanzar la meta!",
         "how_to_step1": "**1.** Haz clic en los enlaces de voto en el embed de arriba.",
         "how_to_step2": "**2.** Completa el captcha en el sitio de votación.",
@@ -237,6 +238,8 @@ def t(key: str, lang: str = "en", **kwargs) -> str:
     """Get a translated string with optional format arguments."""
     strings = STRINGS.get(lang, STRINGS["en"])
     text = strings.get(key, STRINGS["en"].get(key, key))
+    kwargs.setdefault("flag", NATION_FLAG)
+    kwargs.setdefault("nation", NATION_NAME)
     if kwargs:
         try:
             return text.format(**kwargs)

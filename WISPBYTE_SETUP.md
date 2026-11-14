@@ -36,7 +36,7 @@ In WispByte panel, set:
 1. Click **Start** in WispByte panel
 2. Watch the console for:
    ```
-   🇨🇴 Starting Colombia Vote Party Bot...
+   🇨🇺 Starting Castro — Cuba Nation Bot...
    📦 Installing dependencies...
    🚀 Starting bot...
    ✓ Logged in as BotName#1234
@@ -89,4 +89,4 @@ Your bot is now running 24/7 on WispByte!
 
 ---
 
-**Your bot is live! 🇨🇴🎉**
+**Your bot is live! 🇨🇺🎉**

@@ -1,6 +1,6 @@
-# 🇨🇴 Nariño Bot - The Ultimate Colombia Nation Bot
+# 🇨🇺 Castro — Cuba Nation Bot
 
-Named after **Antonio Nariño** - "El Precursor" (The Precursor), one of Colombia's greatest independence leaders.
+A Discord companion for the Cuba nation on DiplomaticaMC, with Cuban-themed onboarding, vote parties, Towny features, and a gold-standard economy.
 
 ## 🎯 Features
 
@@ -13,7 +13,7 @@ Named after **Antonio Nariño** - "El Precursor" (The Precursor), one of Colombi
 - **Advanced analytics** and voting rate tracking
 
 ### 🎉 Welcome Messages
-- Colombian-themed welcome embed
+- Cuban-themed welcome embed
 - Auto-detects new members
 - Links to role requests, tickets, diplomacy
 
@@ -30,14 +30,13 @@ Named after **Antonio Nariño** - "El Precursor" (The Precursor), one of Colombi
 - Close/archive tickets
 
 ### 💰 Economy System
-- Virtual currency (Pesos 💰)
+- Gold-standard economy (Gold 🪙)
 - Daily rewards
 - Work command
 - Balance tracking
 
 ### 🧠 Fun Features
-- Colombia trivia
-- Fun facts (bilingual)
+- Cuban fun facts (bilingual)
 - Interactive commands
 
 ### 🌐 Diplomacy (Coming Soon)
@@ -184,8 +183,7 @@ This will post the vote party tracker embed in the current channel.
 ### Fun Commands
 | Command | Description |
 |---------|-------------|
-| `/funfact` | Get a fun fact about Colombia |
-| `/trivia` | Start a trivia game |
+| `/funfact` | Get a fun fact about Cuba |
 
 ---
 
@@ -221,8 +219,8 @@ MAX_VOTES_PER_CYCLE = 3      # Max votes per player per cycle
 ```python
 STARTING_BALANCE = 100       # Starting money
 VOTE_REWARD = 50             # Reward for voting
-CURRENCY_NAME = "Pesos"      # Currency name
-CURRENCY_EMOJI = "💰"        # Currency emoji
+CURRENCY_NAME = "Gold"       # Currency name
+CURRENCY_EMOJI = "🪙"        # Currency emoji
 ```
 
 ### Roles
@@ -387,7 +385,7 @@ These features are planned for future updates:
 
 ## 🤝 Contributing
 
-This is a custom bot for the Colombia nation on DiplomaticaMC. If you want to contribute:
+This is a custom bot for the Cuba nation on DiplomaticaMC. If you want to contribute:
 
 1. Fork the repository
 2. Create a feature branch
@@ -404,11 +402,10 @@ MIT License - Feel free to modify and use for your own nation bot!
 
 ## 🎉 Credits
 
-**Bot Name:** Nariño  
-**Named After:** Antonio Nariño - "El Precursor"  
-**Nation:** Colombia 🇨🇴  
+**Bot Name:** Castro  
+**Nation:** Cuba 🇨🇺  
 **Server:** DiplomaticaMC  
-**Created By:** Colombia Nation Admin Team  
+**Created By:** Cuba Nation Admin Team  
 
 ---
 
@@ -424,13 +421,13 @@ If you need help:
 
 ## 🚀 Ready to Go!
 
-Your Nariño bot is now ready to serve the Colombia nation! 
+Castro is ready to serve the Cuba nation!
 
 **Next steps:**
 1. ✅ Push code to GitHub
 2. ✅ Restart bot on your hosting panel
 3. ✅ Run `/voteparty setup` in Discord
 4. ✅ Test all commands
-5. ✅ Enjoy your premium nation bot! 🇨🇴
+5. ✅ Enjoy your Cuba nation bot! 🇨🇺
 
-¡Bienvenido a Colombia! 🌴
+¡Bienvenido a Cuba! 🌴

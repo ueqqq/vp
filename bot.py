@@ -1,7 +1,4 @@
-"""
-Nariño Bot - The Ultimate Colombia Nation Bot
-Named after Antonio Nariño - Colombian independence leader
-"""
+"""Castro — Cuban nation community bot."""
 
 import os
 import asyncio
@@ -13,13 +10,14 @@ import discord
 from discord.ext import commands, tasks
 
 from config import (
-    BOT_NAME, BOT_VERSION, BOT_COLOR,
+    BOT_NAME, BOT_VERSION, BOT_COLOR, NATION_NAME, NATION_FLAG,
+    CURRENCY_NAME, CURRENCY_EMOJI,
     VOTE_GOAL, SCRAPE_INTERVAL_SECONDS, PING_THRESHOLD,
     PING_DELETE_SECONDS, MAX_VOTES_PER_CYCLE,
     NATION_MEMBER_ROLE, ALLY_ROLE, VP_ROLE, VERIFIED_ROLE,
     STAFF_ROLE, LEADERSHIP_ROLE,
     TICKET_CATEGORY_NAME, TICKET_STAFF_ROLE,
-    COLOR_GOLD, COLOR_BLUE, COLOR_RED,
+    COLOR_GOLD, COLOR_BLUE, COLOR_RED, COLOR_TURQUOISE,
     VOTE_SITES, REMINDER_COOLDOWN,
     # DiplomaticaMC specific
     STARTING_GOLD, VOTE_REWARD_GOLD, DAILY_REWARD_GOLD, WORK_REWARD_GOLD,
@@ -36,10 +34,10 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("Nariño")
+logger = logging.getLogger(BOT_NAME)
 
-class NariñoBot(commands.Bot):
-    """The ultimate Colombia nation bot"""
+class CastroBot(commands.Bot):
+    """Discord bot for the Cuban nation community."""
     
     def __init__(self):
         intents = discord.Intents.default()
@@ -51,7 +49,10 @@ class NariñoBot(commands.Bot):
             command_prefix="!",
             intents=intents,
             help_command=None,
-            activity=discord.Activity(type=discord.ActivityType.watching, name="over Colombia 🇨🇴")
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name=f"over {NATION_NAME} {NATION_FLAG}"
+            )
         )
         
         # Core systems
@@ -246,12 +247,12 @@ class NariñoBot(commands.Bot):
                 lang = i18n.get_user_lang(user_id)
                 if lang == "es":
                     message = (
-                        f"🔔 **¡Recordatorio!** ¡La Fiesta de Votos de Colombia sigue!\n"
+                        f"🔔 **¡Recordatorio!** ¡La Fiesta de Votos de {NATION_NAME} sigue!\n"
                         f"{self.remaining} votos restantes. ¡Ven a votar ahora!\n\n"
                     )
                 else:
                     message = (
-                        f"🔔 **Reminder!** The Colombia Vote Party is still going!\n"
+                        f"🔔 **Reminder!** The {NATION_NAME} Vote Party is still going!\n"
                         f"{self.remaining} votes remaining. Come vote now!\n\n"
                     )
                 for site in VOTE_SITES:
@@ -418,17 +419,17 @@ class NariñoBot(commands.Bot):
         
         # Determine color
         if self.remaining <= 0:
-            color = COLOR_GOLD
+            color = COLOR_BLUE
         elif self.remaining <= PING_THRESHOLD:
             color = COLOR_RED
         elif self.remaining <= 50:
-            color = COLOR_BLUE
+            color = COLOR_TURQUOISE
         else:
-            color = COLOR_GOLD
+            color = COLOR_BLUE
         
         # Build progress bar
         filled = int(percentage / 10)
-        bar = "🟨" * filled + "⬜" * (10 - filled)
+        bar = "🟦" * filled + "⬜" * (10 - filled)
         
         # Status message
         if self.remaining <= 0:
@@ -443,7 +444,7 @@ class NariñoBot(commands.Bot):
             status = "🗳️ **Vote party in progress**"
         
         embed = discord.Embed(
-            title="🇨🇴 Colombia Vote Party",
+            title=f"{NATION_FLAG} {NATION_NAME} Vote Party",
             description="",
             color=color
         )
@@ -554,7 +555,7 @@ class NariñoBot(commands.Bot):
 class VotePartyCog(commands.Cog):
     """Vote party commands"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
     @commands.Cog.listener()
@@ -863,14 +864,14 @@ class VotePartyCog(commands.Cog):
 class NationCog(commands.Cog):
     """Nation management commands"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
     @discord.app_commands.command(name="role-request", description="Request a nation role")
     async def role_request(self, interaction: discord.Interaction):
         """Show role request panel"""
         embed = discord.Embed(
-            title="🇨🇴 Colombia Role Requests",
+            title=f"{NATION_FLAG} {NATION_NAME} Role Requests",
             description=(
                 "Choose a role below. Citizenship and Ally requests go to leadership review. "
                 "Vote Party Pings can be toggled instantly.\n\n"
@@ -886,7 +887,7 @@ class NationCog(commands.Cog):
 class WelcomeCog(commands.Cog):
     """Advanced welcome system with interactive onboarding"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
         self.welcome_streaks = {}  # Track consecutive welcomes
         self.welcome_games = {}  # Active welcome games
@@ -903,35 +904,45 @@ class WelcomeCog(commands.Cog):
         guild_id = member.guild.id
         self.welcome_streaks[guild_id] = self.welcome_streaks.get(guild_id, 0) + 1
         streak = self.welcome_streaks[guild_id]
+        lang = i18n.get_user_lang(member.id)
+        if lang == "es":
+            welcome_stats = (
+                f"**Racha de bienvenidas:** 🔥 {streak}\n"
+                f"**Miembro #{member.guild.member_count}**"
+            )
+            welcome_content = (
+                f"{NATION_FLAG} {member.mention} acaba de llegar a {NATION_NAME}. "
+                "¡Bienvenido a la isla!"
+            )
+        else:
+            welcome_stats = (
+                f"**Welcome streak:** 🔥 {streak}\n"
+                f"**Member #{member.guild.member_count}**"
+            )
+            welcome_content = (
+                f"{NATION_FLAG} {member.mention} just joined {NATION_NAME}. "
+                "Welcome to the island!"
+            )
         
         # Create interactive welcome embed
         embed = discord.Embed(
-            title=f"🇨🇴 ¡Bienvenido a Colombia, {member.display_name}!",
+            title=i18n.get("welcome_title", lang, user=member.display_name),
             description=(
-                f"**Welcome Streak:** 🔥 {streak} members\n"
-                f"**Member #{member.guild.member_count}**\n\n"
-                "Comrade, you have reached our shores. Whether you come to build a home, "
-                "stand alongside our people, or speak on behalf of another nation, there is "
-                "a place for you here.\n\n"
-                "🌟 **Quick Start Guide**\n"
-                "1️⃣ Read our rules in #rules\n"
-                "2️⃣ Introduce yourself in #introductions\n"
-                "3️⃣ Request citizenship below\n"
-                "4️⃣ Join the conversation!\n\n"
-                "— Nariño 🇨🇴"
+                f"{welcome_stats}\n\n"
+                f"{i18n.get('welcome_desc', lang)}"
             ),
-            color=COLOR_GOLD,
+            color=BOT_COLOR,
             timestamp=discord.utils.utcnow()
         )
         
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.set_footer(text="Welcome to the nation!")
+        embed.set_footer(text=i18n.get("welcome_footer", lang))
         
         # Create interactive onboarding view
         view = WelcomeOnboardingView(self.bot, member)
         
         welcome_msg = await welcome_channel.send(
-            content=f"🎉 {member.mention} just joined Colombia! Welcome!",
+            content=welcome_content,
             embed=embed,
             view=view
         )
@@ -947,10 +958,10 @@ class WelcomeCog(commands.Cog):
             description=(
                 f"**{new_member.display_name}** is member #{streak}!\n\n"
                 "🎁 **Special Rewards:**\n"
-                "• +500 Pesos bonus\n"
+                f"• +500 {CURRENCY_NAME} bonus\n"
                 "• Exclusive 'Milestone Member' role\n"
                 "• Featured in #hall-of-fame\n\n"
-                "**Quick Challenge:** First person to say '¡Bienvenido!' gets +100 Pesos!"
+                f"Give {new_member.display_name} a warm welcome in the chat!"
             ),
             color=0xFFD700
         )
@@ -968,7 +979,7 @@ class WelcomeCog(commands.Cog):
 class EconomyCog(commands.Cog):
     """Advanced economy system - Gold Standard (DiplomaticaMC)"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
     @discord.app_commands.command(name="balance", description="Check your gold holdings")
@@ -1167,7 +1178,7 @@ class EconomyCog(commands.Cog):
 class DiplomacyCog(commands.Cog):
     """Advanced diplomacy system with wars, alliances, and treaties"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
     @discord.app_commands.command(name="diplomacy", description="Open diplomatic request")
@@ -1198,14 +1209,14 @@ class DiplomacyCog(commands.Cog):
         for war in wars:
             if war["attacker"] == nation or war["defender"] == nation:
                 await interaction.response.send_message(
-                    f"❌ Colombia is already at war with {nation}!",
+                    f"❌ {NATION_NAME} is already at war with {nation}!",
                     ephemeral=True
                 )
                 return
         
         # Create war
         war = {
-            "attacker": "Colombia",
+            "attacker": NATION_NAME,
             "defender": nation,
             "reason": reason,
             "declared_by": interaction.user.id,
@@ -1221,7 +1232,7 @@ class DiplomacyCog(commands.Cog):
         war_embed = discord.Embed(
             title="⚔️ WAR DECLARED ⚔️",
             description=(
-                f"**Colombia** has declared war on **{nation}**!\n\n"
+                f"**{NATION_NAME}** has declared war on **{nation}**!\n\n"
                 f"**Reason:** {reason}\n"
                 f"**Declared by:** {interaction.user.mention}\n\n"
                 "🔴 **Status:** Active\n"
@@ -1247,7 +1258,7 @@ class DiplomacyCog(commands.Cog):
         """Propose alliance"""
         # Create alliance proposal
         proposal = {
-            "proposer": "Colombia",
+            "proposer": NATION_NAME,
             "target": nation,
             "terms": terms,
             "proposed_by": interaction.user.id,
@@ -1264,7 +1275,7 @@ class DiplomacyCog(commands.Cog):
         proposal_embed = discord.Embed(
             title="🤝 Alliance Proposal",
             description=(
-                f"**Colombia** proposes an alliance with **{nation}**\n\n"
+                f"**{NATION_NAME}** proposes an alliance with **{nation}**\n\n"
                 f"**Terms:** {terms}\n"
                 f"**Proposed by:** {interaction.user.mention}\n\n"
                 "Leadership must vote on this proposal."
@@ -1305,14 +1316,14 @@ class DiplomacyCog(commands.Cog):
         
         if not war_found:
             await interaction.response.send_message(
-                f"❌ Colombia is not at war with {nation}!",
+                f"❌ {NATION_NAME} is not at war with {nation}!",
                 ephemeral=True
             )
             return
         
         # Create peace treaty
         treaty = {
-            "nation1": "Colombia",
+            "nation1": NATION_NAME,
             "nation2": nation,
             "terms": terms,
             "proposed_by": interaction.user.id,
@@ -1328,7 +1339,7 @@ class DiplomacyCog(commands.Cog):
         treaty_embed = discord.Embed(
             title="🕊️ Peace Treaty Proposed",
             description=(
-                f"**Colombia** proposes peace with **{nation}**\n\n"
+                f"**{NATION_NAME}** proposes peace with **{nation}**\n\n"
                 f"**Terms:** {terms}\n"
                 f"**Proposed by:** {interaction.user.mention}\n\n"
                 "Both nations must agree to the terms."
@@ -1359,7 +1370,7 @@ class DiplomacyCog(commands.Cog):
         
         embed = discord.Embed(
             title="🌐 Diplomatic Relations",
-            description="Current status of Colombia's diplomatic relations",
+            description=f"Current status of {NATION_NAME}'s diplomatic relations",
             color=COLOR_BLUE,
             timestamp=discord.utils.utcnow()
         )
@@ -1391,7 +1402,7 @@ class DiplomacyCog(commands.Cog):
 class DiplomacyView(discord.ui.View):
     """Diplomacy management view"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         super().__init__(timeout=None)
         self.bot = bot
     
@@ -1451,7 +1462,7 @@ class DiplomacyView(discord.ui.View):
 class AllianceVoteView(discord.ui.View):
     """View for voting on alliance proposals"""
     
-    def __init__(self, bot: NariñoBot, proposal_index: int):
+    def __init__(self, bot: CastroBot, proposal_index: int):
         super().__init__(timeout=None)
         self.bot = bot
         self.proposal_index = proposal_index
@@ -1541,7 +1552,7 @@ class AllianceVoteView(discord.ui.View):
 class TownyCog(commands.Cog):
     """Towny integration for DiplomaticaMC"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
     @discord.app_commands.command(name="town", description="Manage your town")
@@ -1939,7 +1950,7 @@ class TownyCog(commands.Cog):
 class SiegeWarCog(commands.Cog):
     """SiegeWar integration for DiplomaticaMC"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
     @discord.app_commands.command(name="siege", description="Manage sieges")
@@ -2042,7 +2053,7 @@ class SiegeWarCog(commands.Cog):
 class InactivityCog(commands.Cog):
     """Inactivity tracking for DiplomaticaMC"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
         self.inactivity_check.start()
     
@@ -2136,10 +2147,10 @@ class InactivityCog(commands.Cog):
 class FunCog(commands.Cog):
     """Fun features"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         self.bot = bot
     
-    @discord.app_commands.command(name="funfact", description="Get a fun fact about Colombia")
+    @discord.app_commands.command(name="funfact", description=f"Get a fun fact about {NATION_NAME}")
     async def funfact(self, interaction: discord.Interaction):
         """Get a fun fact"""
         import random
@@ -2150,7 +2161,7 @@ class FunCog(commands.Cog):
         fact = random.choice(facts)
         
         embed = discord.Embed(
-            title="🇨🇴 Did You Know?",
+            title=f"{NATION_FLAG} Did You Know?",
             description=fact,
             color=COLOR_GOLD
         )
@@ -2162,7 +2173,7 @@ class FunCog(commands.Cog):
 class VoteNotifyView(discord.ui.View):
     """Vote party buttons"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         super().__init__(timeout=None)
         self.bot = bot
     
@@ -2199,7 +2210,7 @@ class VoteNotifyView(discord.ui.View):
 class WelcomeOnboardingView(discord.ui.View):
     """Interactive onboarding view for new members"""
     
-    def __init__(self, bot: NariñoBot, new_member: discord.Member):
+    def __init__(self, bot: CastroBot, new_member: discord.Member):
         super().__init__(timeout=86400)  # 24 hours
         self.bot = bot
         self.new_member = new_member
@@ -2300,9 +2311,9 @@ class WelcomeOnboardingView(discord.ui.View):
         
         await interaction.response.send_message(
             "🎁 **Welcome Gift Claimed!**\n\n"
-            "• +100 Pesos 💰\n"
+            f"• +100 {CURRENCY_NAME} {CURRENCY_EMOJI}\n"
             "• ✅ Verified role\n"
-            "• 🎉 Welcome to Colombia!\n\n"
+            f"• 🎉 Welcome to {NATION_NAME}!\n\n"
             "Start exploring and have fun!",
             ephemeral=True
         )
@@ -2310,7 +2321,7 @@ class WelcomeOnboardingView(discord.ui.View):
 class RoleRequestView(discord.ui.View):
     """Advanced role request system with multi-step verification"""
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         super().__init__(timeout=None)
         self.bot = bot
     
@@ -2326,7 +2337,7 @@ class RoleRequestView(discord.ui.View):
         nation_role = discord.utils.get(interaction.guild.roles, name=NATION_MEMBER_ROLE)
         if nation_role and nation_role in interaction.user.roles:
             await interaction.response.send_message(
-                "✅ You're already a citizen of Colombia!",
+                f"✅ You're already a citizen of {NATION_NAME}!",
                 ephemeral=True
             )
             return
@@ -2439,14 +2450,14 @@ class CitizenshipModal(discord.ui.Modal, title="🏠 Citizenship Application"):
     
     experience = discord.ui.TextInput(
         label="Why should we accept you?",
-        placeholder="Tell us about yourself and why you want to join Colombia...",
+        placeholder=f"Tell us about yourself and why you want to join {NATION_NAME}...",
         style=discord.TextStyle.paragraph,
         min_length=50,
         max_length=1000,
         required=True
     )
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         super().__init__()
         self.bot = bot
     
@@ -2503,7 +2514,7 @@ class CitizenshipModal(discord.ui.Modal, title="🏠 Citizenship Application"):
             f"• IGN: {self.ign.value}\n"
             f"• Town: {self.town.value}\n"
             f"• Role: {self.role.value}\n\n"
-            "Good luck, comrade! 🇨🇴",
+            f"Good luck, and welcome to {NATION_NAME}! {NATION_FLAG}",
             ephemeral=True
         )
 
@@ -2531,7 +2542,7 @@ class DiplomatModal(discord.ui.Modal, title="🌐 Diplomat Application"):
         required=True
     )
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         super().__init__()
         self.bot = bot
     
@@ -2583,7 +2594,7 @@ class DiplomatModal(discord.ui.Modal, title="🌐 Diplomat Application"):
 class ApplicationReviewView(discord.ui.View):
     """View for reviewing applications"""
     
-    def __init__(self, bot: NariñoBot, applicant_id: int, app_type: str):
+    def __init__(self, bot: CastroBot, applicant_id: int, app_type: str):
         super().__init__(timeout=None)
         self.bot = bot
         self.applicant_id = applicant_id
@@ -2641,7 +2652,7 @@ class ApplicationReviewView(discord.ui.View):
                         f"🎉 **Application Approved!**\n\n"
                         f"Your {self.app_type} application has been approved!\n"
                         f"You now have the **{role.name}** role.\n\n"
-                        f"Welcome to Colombia! 🇨🇴"
+                        f"Welcome to {NATION_NAME}! {NATION_FLAG}"
                     )
                 except:
                     pass
@@ -2733,7 +2744,7 @@ class AllyModal(discord.ui.Modal, title="Request Ally Status"):
         required=True
     )
     
-    def __init__(self, bot: NariñoBot):
+    def __init__(self, bot: CastroBot):
         super().__init__()
         self.bot = bot
     
@@ -2759,7 +2770,7 @@ def main():
         logger.error("=" * 60)
         return
     
-    bot = NariñoBot()
+    bot = CastroBot()
     bot.run(token, log_handler=None)
 
 if __name__ == "__main__":

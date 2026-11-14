@@ -1,8 +1,8 @@
-# Colombia Vote Party Bot - Project Summary
+# 🇨🇺 Castro — Cuba Nation Bot — Project Summary
 
 ## 🎯 What Was Built
 
-A complete, production-ready Discord bot for tracking vote party progress on the Colombia nation (DiplomaticaMC) with a **premium embed design** inspired by Colombian indigenous cultures (Muisca, Tairona, Quimbaya) that looks modern, professional, and culturally authentic.
+A Discord community bot for the Cuba nation on DiplomaticaMC, with Cuban-themed onboarding, vote parties, Towny features, and a gold-standard economy.
 
 ## ✅ All Requirements Met
 
@@ -15,15 +15,15 @@ A complete, production-ready Discord bot for tracking vote party progress on the
 - ✅ Manual admin overrides supported
 
 ### Premium Embed Design ✓
-- ✅ Title: 🇨🇴 Colombia Vote Party Tracker
+- ✅ Title: 🇨🇺 Cuba Vote Party Tracker
 - ✅ Large, bold remaining votes text
 - ✅ Clean progress bar with percentage
 - ✅ Individual site votes in neat format
 - ✅ Clickable vote links
-- ✅ **Dynamic color-coded accent bar** (Colombian indigenous palette):
-  - Gold (#D4AF37) when remaining > 50 (Muisca gold work)
-  - Turquoise (#40E0D0) when remaining is 31-50 (Indigenous jewelry)
-  - Blood Red (#8B0000) when remaining ≤ 30 (Ceremonial significance)
+- ✅ **Dynamic color-coded accent bar** inspired by the Cuban flag:
+  - Blue for the main tracker state
+  - Turquoise for the middle progress state
+  - Red for the final push
 - ✅ Dynamic status messages that change with progress
 - ✅ Excellent spacing and visual hierarchy
 - ✅ Dark theme, modern and polished with cultural authenticity
@@ -91,7 +91,7 @@ A complete, production-ready Discord bot for tracking vote party progress on the
 The embed features a **premium, modern design** that looks significantly better than basic trackers:
 
 ### Visual Hierarchy
-1. **Large title** with Colombian flag emoji
+1. **Large title** with the Cuban flag emoji
 2. **Bold remaining votes** (2xl-3xl font size)
 3. **Progress bar** with Unicode blocks (▰▱)
 4. **Status message** that changes dynamically
@@ -100,10 +100,11 @@ The embed features a **premium, modern design** that looks significantly better 
 7. **Clickable links** in Discord blue
 8. **Footer** with timestamp
 
-### Color Psychology (Colombian Indigenous Palette)
-- **Gold** (#D4AF37): Early stage, Muisca gold work - prosperity and achievement
-- **Turquoise** (#40E0D0): Mid stage, Indigenous jewelry - wisdom and protection
-- **Blood Red** (#8B0000): Final push, Ceremonial significance - urgency and importance
+### Cuban Flag-Inspired Palette
+- **Blue**: Primary identity color for the nation and tracker
+- **Turquoise**: A calm transition state as the community progresses
+- **Red**: Final-push accent for vote-party milestones
+- **Gold**: Reserved for the server's in-game currency and rewards
 
 ### Status Messages
 - ✅ "All good! Let's get started!" (>100 remaining)

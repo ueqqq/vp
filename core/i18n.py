@@ -5,6 +5,8 @@ Advanced i18n system with auto-detection and context-aware translations
 import re
 from typing import Optional
 
+from config import BOT_NAME, NATION_FLAG, NATION_NAME
+
 class I18n:
     """Advanced internationalization with auto-detection"""
     
@@ -25,14 +27,14 @@ class I18n:
         """English translations"""
         return {
             # Welcome
-            "welcome_title": "🇨🇴 Welcome to Colombia, {user}!",
-            "welcome_desc": "Comrade, you have reached our shores. Whether you come to build a home, stand alongside our people, or speak on behalf of another nation, there is a place for you here.\n\nA nation is built by its people—and every great undertaking begins with someone willing to lay the first block.\n\nRead our rules, meet the community, and request citizenship if you wish to call Colombia home. Diplomats, our Foreign Affairs office awaits you.\n\n¡Bienvenido a Colombia! 🌴\n— Nariño",
+            "welcome_title": "{flag} Welcome to {nation}, {user}!",
+            "welcome_desc": "Welcome to the island, and make yourself at home. Build a town, meet your neighbors, and help our community thrive.\n\n🌟 **A good place to start**\nRead the rules, introduce yourself, and request citizenship when you are ready. Visiting diplomats are welcome, too.\n\n¡Bienvenido a {nation}! 🌴\n— {bot_name}",
             "welcome_footer": "Citizenship: /role-request · Support: /ticket · Diplomacy: /diplomacy",
             
             # Vote Party
-            "vote_party_title": "🇨🇴 Colombia Vote Party",
+            "vote_party_title": "{flag} {nation} Vote Party",
             "vote_party_desc": "The community is working together to reach {goal} votes!",
-            "vote_party_complete": "🎉 🇨🇴 VOTE PARTY COMPLETE! 🇨🇴 🎉",
+            "vote_party_complete": "🎉 {flag} {nation} VOTE PARTY COMPLETE! {flag} 🎉",
             "vote_party_complete_desc": "The community reached **{goal} votes**! Time for the party!",
             "votes_remaining": "**{remaining}** votes remaining",
             "votes_collected": "{progress} / {VOTE_GOAL} votes collected",
@@ -53,7 +55,7 @@ class I18n:
             "btn_leaderboard": "🏆 Leaderboard",
             
             # Role requests
-            "role_request_title": "🇨🇴 Colombia Role Requests",
+            "role_request_title": "{flag} {nation} Role Requests",
             "role_request_desc": "Choose a role below. Citizenship and Ally requests go to leadership review. Vote Party Pings can be toggled instantly.\n\n**Request format:**\nMinecraft username · Nation · Town · Nation role",
             "btn_citizen": "🏠 Request Citizenship",
             "btn_ally": "🤝 Request Ally Status",
@@ -98,8 +100,8 @@ class I18n:
             "town_joined": "✅ {user} has joined **{town}**!",
             
             # Fun
-            "fun_fact_title": "🇨🇴 Did You Know?",
-            "trivia_title": "🧠 Colombia Trivia",
+            "fun_fact_title": "{flag} Did You Know?",
+            "trivia_title": "🧠 {nation} Trivia",
             "trivia_correct": "✅ Correct! The answer is **{answer}**!",
             "trivia_wrong": "❌ Wrong! The correct answer is **{answer}**.",
             
@@ -119,14 +121,14 @@ class I18n:
         """Spanish translations"""
         return {
             # Welcome
-            "welcome_title": "🇨🇴 ¡Bienvenido a Colombia, {user}!",
-            "welcome_desc": "Camarada, has llegado a nuestras costas. Ya vengas a construir un hogar, estar junto a nuestra gente, o hablar en nombre de otra nación, hay un lugar para ti aquí.\n\nUna nación se construye por su gente—y cada gran empresa comienza con alguien dispuesto a poner el primer bloque.\n\nLee nuestras reglas, conoce a la comunidad, y solicita ciudadanía si deseas llamar a Colombia tu hogar. Diplomáticos, nuestra oficina de Asuntos Exteriores te espera.\n\n¡Bienvenido a Colombia! 🌴\n— Nariño",
+            "welcome_title": "{flag} ¡Bienvenido a {nation}, {user}!",
+            "welcome_desc": "¡Bienvenido a la isla! Ponte cómodo, construye un pueblo, conoce a tus vecinos y ayuda a crecer a nuestra comunidad.\n\n🌟 **Para empezar**\nLee las reglas, preséntate y solicita ciudadanía cuando quieras. Los diplomáticos también son bienvenidos.\n\n¡Bienvenido a {nation}! 🌴\n— {bot_name}",
             "welcome_footer": "Ciudadanía: /role-request · Soporte: /ticket · Diplomacia: /diplomacy",
             
             # Vote Party
-            "vote_party_title": "🇨🇴 Fiesta de Votos de Colombia",
+            "vote_party_title": "{flag} Fiesta de Votos de {nation}",
             "vote_party_desc": "¡La comunidad está trabajando junta para alcanzar {goal} votos!",
-            "vote_party_complete": "🎉 🇨🇴 ¡FIESTA DE VOTOS COMPLETA! 🇨🇴 🎉",
+            "vote_party_complete": "🎉 {flag} ¡FIESTA DE VOTOS DE {nation} COMPLETA! {flag} 🎉",
             "vote_party_complete_desc": "¡La comunidad alcanzó **{goal} votos**! ¡Hora de la fiesta!",
             "votes_remaining": "**{remaining}** votos restantes",
             "votes_collected": "{progress} / {VOTE_GOAL} votos recogidos",
@@ -147,7 +149,7 @@ class I18n:
             "btn_leaderboard": "🏆 Clasificación",
             
             # Role requests
-            "role_request_title": "🇨🇴 Solicitudes de Roles de Colombia",
+            "role_request_title": "{flag} Solicitudes de Roles de {nation}",
             "role_request_desc": "Elige un rol abajo. Las solicitudes de Ciudadanía y Aliado van a revisión de liderazgo. Los Pings de Fiesta de Votos se pueden alternar instantáneamente.\n\n**Formato de solicitud:**\nUsuario de Minecraft · Nación · Pueblo · Rol de nación",
             "btn_citizen": "🏠 Solicitar Ciudadanía",
             "btn_ally": "🤝 Solicitar Estado de Aliado",
@@ -192,8 +194,8 @@ class I18n:
             "town_joined": "✅ ¡{user} se ha unido a **{town}**!",
             
             # Fun
-            "fun_fact_title": "🇨🇴 ¿Sabías Que?",
-            "trivia_title": "🧠 Trivia de Colombia",
+            "fun_fact_title": "{flag} ¿Sabías que?",
+            "trivia_title": "🧠 Trivia de {nation}",
             "trivia_correct": "✅ ¡Correcto! La respuesta es **{answer}**!",
             "trivia_wrong": "❌ ¡Incorrecto! La respuesta correcta es **{answer}**.",
             
@@ -215,6 +217,9 @@ class I18n:
             lang = "en"
         
         text = self.translations[lang].get(key, self.translations["en"].get(key, key))
+        kwargs.setdefault("bot_name", BOT_NAME)
+        kwargs.setdefault("flag", NATION_FLAG)
+        kwargs.setdefault("nation", NATION_NAME)
         
         if kwargs:
             try:

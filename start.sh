@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# WispByte Startup Script for Colombia Vote Party Bot
+# WispByte Startup Script for Castro — Cuba Nation Bot
 # This script installs dependencies and starts the bot
 
-echo "🇨🇴 Starting Colombia Vote Party Bot..."
+echo "🇨🇺 Starting Castro — Cuba Nation Bot..."
 echo ""
 
 # Install Python dependencies

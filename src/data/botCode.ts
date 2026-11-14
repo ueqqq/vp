@@ -1,8 +1,8 @@
 export const mainBotCode = `"""
-Colombia Vote Party Tracker - Discord Bot (Premium Edition)
+Cuba Vote Party Tracker - Discord Bot (Premium Edition)
 ============================================================
 Production-ready Discord bot for tracking vote party progress
-on the Colombia nation (DiplomaticaMC).
+on the Cuba nation (DiplomaticaMC).
 
 Features:
 - Premium embed design with multiple visual states
@@ -16,7 +16,7 @@ Features:
 - Complete admin slash command suite
 - Robust error handling and recovery
 
-Author: Colombia Nation Admin Team
+Author: Cuba Nation Admin Team
 License: MIT
 """
 

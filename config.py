@@ -1,16 +1,16 @@
-"""
-Nariño Bot Configuration
-Named after Antonio Nariño - Colombian independence leader
-"""
+"""Castro — Cuban nation community bot configuration."""
 
 import os
 from typing import Dict, List
 
 # ─── Core Settings ────────────────────────────────────────────────────────────
 
-BOT_NAME = "Nariño"
-BOT_VERSION = "1.0.0"
-BOT_COLOR = 0xF1C40F  # Colombian yellow
+BOT_NAME = "Castro"
+BOT_VERSION = "1.1.0"
+NATION_NAME = "Cuba"
+NATION_FLAG = "🇨🇺"
+BOT_COLOR = 0x002A8F  # Cuban flag blue
+THUMBNAIL_URL = os.getenv("BOT_THUMBNAIL_URL", "")
 
 # ─── Vote Party Settings ──────────────────────────────────────────────────────
 
@@ -130,9 +130,9 @@ class EmbedState:
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 
-COLOR_GOLD = 0xF1C40F
-COLOR_BLUE = 0x003893  # Colombian blue
-COLOR_RED = 0xCE1126   # Colombian red
+COLOR_GOLD = 0xF1C40F  # DiplomaticaMC currency
+COLOR_BLUE = 0x002A8F  # Cuban flag blue
+COLOR_RED = 0xCF142B   # Cuban flag red
 COLOR_TURQUOISE = 0x1ABC9C
 COLOR_CELEBRATION = 0x2ECC71
 COLOR_COOLDOWN = 0x95A5A6
@@ -141,32 +141,28 @@ COLOR_COOLDOWN = 0x95A5A6
 
 MILESTONES = [25, 50, 75, 100, 150, 200, 225, 250]
 
-# ─── Fun Facts (Colombia) ────────────────────────────────────────────────────
+# ─── Fun Facts (Cuba) ────────────────────────────────────────────────────────
 
 FUN_FACTS = {
     "en": [
-        "Colombia is the only South American country with coastlines on both the Pacific Ocean and the Caribbean Sea!",
-        "Colombia produces 12% of the world's coffee!",
-        "Bogotá, the capital, is higher than most European mountains at 2,640 meters!",
-        "Colombia has more bird species than any other country - over 1,900!",
-        "The emerald industry in Colombia produces 60% of the world's emeralds!",
-        "Colombia is named after Christopher Columbus (Cristóbal Colón in Spanish)!",
-        "The Amazon rainforest covers 35% of Colombia's territory!",
-        "Colombia has over 50 national natural parks!",
-        "Shakira and J Balvin are from Colombia!",
-        "Colombia is the world's leading producer of emeralds!",
+        "Cuba is the largest island in the Caribbean.",
+        "Havana's historic center is a UNESCO World Heritage Site.",
+        "Pico Turquino is Cuba's highest mountain, rising to about 1,974 meters.",
+        "The tocororo, Cuba's national bird, has red, white, and blue plumage.",
+        "Cuba's flag has five alternating blue and white stripes and a white star in a red triangle.",
+        "Cuba is an archipelago made up of the main island and many smaller islands and keys.",
+        "Cuban son music helped shape several popular Latin music styles.",
+        "Baseball has been one of Cuba's most popular sports for generations.",
     ],
     "es": [
-        "¡Colombia es el único país sudamericano con costas en el Océano Pacífico y el Mar Caribe!",
-        "¡Colombia produce el 12% del café del mundo!",
-        "¡Bogotá, la capital, está más alta que la mayoría de las montañas europeas a 2,640 metros!",
-        "¡Colombia tiene más especies de aves que cualquier otro país - más de 1,900!",
-        "¡La industria esmeraldina de Colombia produce el 60% de las esmeraldas del mundo!",
-        "¡Colombia lleva el nombre de Cristóbal Colón!",
-        "¡La selva amazónica cubre el 35% del territorio colombiano!",
-        "¡Colombia tiene más de 50 parques naturales nacionales!",
-        "¡Shakira y J Balvin son de Colombia!",
-        "¡Colombia es el principal productor mundial de esmeraldas!",
+        "Cuba es la isla más grande del Caribe.",
+        "El centro histórico de La Habana es Patrimonio de la Humanidad de la UNESCO.",
+        "El Pico Turquino es la montaña más alta de Cuba, con unos 1.974 metros.",
+        "El tocororo, ave nacional de Cuba, tiene plumaje rojo, blanco y azul.",
+        "La bandera cubana tiene cinco franjas azules y blancas y una estrella blanca en un triángulo rojo.",
+        "Cuba es un archipiélago formado por la isla principal y muchas islas y cayos pequeños.",
+        "El son cubano ayudó a dar forma a varios estilos populares de música latina.",
+        "El béisbol ha sido uno de los deportes más populares de Cuba durante generaciones.",
     ]
 }
 
@@ -174,23 +170,23 @@ FUN_FACTS = {
 
 TRIVIA_QUESTIONS = {
     "en": [
-        {"q": "What is the capital of Colombia?", "a": "Bogotá"},
-        {"q": "What river is the longest in Colombia?", "a": "Magdalena"},
-        {"q": "What precious stone is Colombia famous for?", "a": "Emerald"},
-        {"q": "Who is known as 'The Liberator' of Colombia?", "a": "Simón Bolívar"},
-        {"q": "What is Colombia's national bird?", "a": "Andean Condor"},
-        {"q": "What ocean borders Colombia to the west?", "a": "Pacific"},
-        {"q": "What sea borders Colombia to the north?", "a": "Caribbean"},
-        {"q": "What famous Colombian singer is known as the 'Queen of Latin Music'?", "a": "Shakira"},
+        {"q": "What is the capital of Cuba?", "a": "Havana"},
+        {"q": "What is Cuba's highest mountain?", "a": "Pico Turquino"},
+        {"q": "What is Cuba's national bird?", "a": "Tocororo"},
+        {"q": "What is the historic center of Havana recognized as?", "a": "A UNESCO World Heritage Site"},
+        {"q": "What are the five long shapes on the Cuban flag?", "a": "Blue and white stripes"},
+        {"q": "What is the name for Cuba's traditional music style that influenced salsa?", "a": "Son cubano"},
+        {"q": "What is the largest island in the Caribbean?", "a": "Cuba"},
+        {"q": "Which sport is especially popular in Cuba?", "a": "Baseball"},
     ],
     "es": [
-        {"q": "¿Cuál es la capital de Colombia?", "a": "Bogotá"},
-        {"q": "¿Qué río es el más largo de Colombia?", "a": "Magdalena"},
-        {"q": "¿Qué piedra preciosa es famosa en Colombia?", "a": "Esmeralda"},
-        {"q": "¿Quién es conocido como 'El Libertador' de Colombia?", "a": "Simón Bolívar"},
-        {"q": "¿Cuál es el ave nacional de Colombia?", "a": "Cóndor Andino"},
-        {"q": "¿Qué océano bordea Colombia al oeste?", "a": "Pacífico"},
-        {"q": "¿Qué mar bordea Colombia al norte?", "a": "Caribe"},
-        {"q": "¿Qué famosa cantante colombiana es conocida como la 'Reina de la Música Latina'?", "a": "Shakira"},
+        {"q": "¿Cuál es la capital de Cuba?", "a": "La Habana"},
+        {"q": "¿Cuál es la montaña más alta de Cuba?", "a": "Pico Turquino"},
+        {"q": "¿Cuál es el ave nacional de Cuba?", "a": "Tocororo"},
+        {"q": "¿Qué reconocimiento tiene el centro histórico de La Habana?", "a": "Patrimonio de la Humanidad de la UNESCO"},
+        {"q": "¿De qué colores son las cinco franjas de la bandera cubana?", "a": "Azules y blancas"},
+        {"q": "¿Qué estilo musical cubano influyó en la salsa?", "a": "Son cubano"},
+        {"q": "¿Cuál es la isla más grande del Caribe?", "a": "Cuba"},
+        {"q": "¿Qué deporte es especialmente popular en Cuba?", "a": "Béisbol"},
     ]
 }

@@ -1,5 +1,5 @@
 """
-Enhanced embed builder with multiple visual states and Colombia-themed design.
+Enhanced embed builder with multiple visual states and Cuban flag colors.
 """
 
 import logging
@@ -9,13 +9,13 @@ from typing import Optional
 import discord
 
 from config import (
-    VOTE_GOAL, SCRAPE_INTERVAL_SECONDS, PING_THRESHOLD,
-    COLOR_GOLD, COLOR_TURQUOISE, COLOR_RED, COLOR_CELEBRATION, COLOR_COOLDOWN,
+    BOT_NAME, VOTE_GOAL, SCRAPE_INTERVAL_SECONDS, PING_THRESHOLD,
+    COLOR_GOLD, COLOR_BLUE, COLOR_TURQUOISE, COLOR_RED, COLOR_CELEBRATION, COLOR_COOLDOWN,
     THUMBNAIL_URL, VOTE_SITES, EmbedState, MILESTONES, MAX_VOTES_PER_CYCLE
 )
 from i18n import t
 
-logger = logging.getLogger("VotePartyBot")
+logger = logging.getLogger(BOT_NAME)
 
 
 class EmbedBuilder:
@@ -47,7 +47,7 @@ class EmbedBuilder:
         elif remaining <= 50:
             return COLOR_TURQUOISE
         else:
-            return COLOR_GOLD
+            return COLOR_BLUE
 
     @staticmethod
     def get_status_line(remaining: int, lang: str = "en") -> str:
@@ -64,13 +64,15 @@ class EmbedBuilder:
             return t("status_started", lang)
 
     @staticmethod
-    def build_progress_bar(percentage: float, color: int = COLOR_GOLD, length: int = 10) -> str:
+    def build_progress_bar(percentage: float, color: int = COLOR_BLUE, length: int = 10) -> str:
         """Build a visually appealing progress bar."""
         filled = int(percentage / (100 / length))
         empty = length - filled
 
         if color == COLOR_RED:
             bar = "🟥" * filled + "⬜" * empty
+        elif color == COLOR_BLUE:
+            bar = "🟦" * filled + "⬜" * empty
         elif color == COLOR_TURQUOISE:
             bar = "🟩" * filled + "⬜" * empty
         else:
@@ -192,7 +194,8 @@ class EmbedBuilder:
             color=color,
         )
 
-        embed.set_thumbnail(url=THUMBNAIL_URL)
+        if THUMBNAIL_URL:
+            embed.set_thumbnail(url=THUMBNAIL_URL)
 
         # Build description based on state
         if state == EmbedState.CELEBRATION:

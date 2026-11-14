@@ -125,11 +125,11 @@ function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center">
-            <Bot size={16} className="text-black" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-700 to-red-600 flex items-center justify-center">
+            <Bot size={16} className="text-white" />
           </div>
-          <span className="font-bold text-white text-sm">Nariño Bot</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-400 font-medium">v1.0</span>
+          <span className="font-bold text-white text-sm">Castro</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-400/20 text-red-300 font-medium">CUBA</span>
         </div>
         <div className="hidden md:flex items-center gap-8">
           <a href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Features</a>
@@ -155,9 +155,9 @@ function Hero() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
       <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-yellow-500/[0.07] rounded-full blur-[128px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/[0.05] rounded-full blur-[128px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-500/[0.03] rounded-full blur-[128px]" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-700/[0.12] rounded-full blur-[128px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-red-600/[0.08] rounded-full blur-[128px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-white/[0.025] rounded-full blur-[128px]" />
       </div>
       
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
@@ -175,13 +175,13 @@ function Hero() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.08] text-gray-400 text-sm font-medium mb-8"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Named after Antonio Nariño • Colombian Independence Leader
+            🇨🇺 Cuba • DiplomaticaMC
           </motion.div>
 
           <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white tracking-tight leading-[0.9] mb-6">
-            <span className="block">Nariño Bot</span>
-            <span className="block mt-2 bg-gradient-to-r from-yellow-300 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
-              DiplomaticaMC Integration
+            <span className="block">Castro</span>
+            <span className="block mt-2 bg-gradient-to-r from-red-300 via-white to-blue-300 bg-clip-text text-transparent">
+              Cuba Nation Bot
             </span>
           </h1>
 
@@ -211,7 +211,7 @@ function Hero() {
           {/* Feature count stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
             {[
-              { label: 'Server Players', value: '25K+', icon: Users, color: 'from-yellow-500/20 to-amber-500/20' },
+              { label: 'Server Players', value: '25K+', icon: Users, color: 'from-red-500/20 to-rose-500/20' },
               { label: 'Discord Members', value: '1.3K', icon: MessageSquare, color: 'from-blue-500/20 to-cyan-500/20' },
               { label: 'Earth Scale', value: '1:450', icon: Globe, color: 'from-green-500/20 to-emerald-500/20' },
               { label: 'Vote Sites', value: '3', icon: Vote, color: 'from-purple-500/20 to-violet-500/20' },
@@ -259,12 +259,12 @@ function FeaturesOverview() {
       icon: Vote,
       title: 'Vote Party System',
       description: '99%+ accuracy scraper with triple-layer extraction, 3 votes per cycle limit, leaderboards, and advanced analytics.',
-      color: 'from-yellow-500 to-amber-500',
+      color: 'from-blue-600 to-red-500',
     },
     {
       icon: Users,
       title: 'Welcome Messages',
-      description: 'Colombian-themed welcome embeds with auto-detection for new members and links to all features.',
+      description: 'Cuban-themed welcome embeds with interactive onboarding and clear paths into the community.',
       color: 'from-blue-500 to-cyan-500',
     },
     {
@@ -282,7 +282,7 @@ function FeaturesOverview() {
     {
       icon: Coins,
       title: 'Economy System',
-      description: 'Virtual currency (Pesos), daily rewards, work commands, shop, and transaction tracking.',
+      description: 'Gold-standard rewards, daily claims, work commands, and transaction tracking.',
       color: 'from-green-500 to-emerald-500',
     },
     {
@@ -325,7 +325,7 @@ function FeaturesOverview() {
       icon: Trophy,
       title: 'Leaderboards',
       description: 'Multiple leaderboards for votes, activity, economy, and custom categories.',
-      color: 'from-yellow-500 to-orange-500',
+      color: 'from-blue-500 to-indigo-500',
     },
     {
       icon: Gift,
@@ -360,8 +360,8 @@ function FeaturesOverview() {
     {
       icon: Star,
       title: 'Fun Features',
-      description: 'Colombia trivia, fun facts, memes, and interactive entertainment commands.',
-      color: 'from-amber-500 to-yellow-500',
+      description: 'Cuban fun facts and small interactive moments for the community.',
+      color: 'from-red-500 to-blue-600',
     },
   ];
 
@@ -443,7 +443,7 @@ function VotePartySection() {
   const progress = (votes / VOTE_GOAL) * 100;
   const filledBlocks = Math.round((progress / 100) * 10);
   const emptyBlocks = 10 - filledBlocks;
-  const progressBar = '🟨'.repeat(filledBlocks) + '⬜'.repeat(emptyBlocks);
+  const progressBar = '🟦'.repeat(filledBlocks) + '⬜'.repeat(emptyBlocks);
 
   const getMotivational = () => {
     if (remaining <= 10) return '🔥 Almost there! Party imminent!';
@@ -456,7 +456,7 @@ function VotePartySection() {
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
   return (
-    <section id="vote-party" className="relative py-32 bg-gradient-to-b from-transparent via-yellow-500/[0.02] to-transparent">
+    <section id="vote-party" className="relative py-32 bg-gradient-to-b from-transparent via-blue-500/[0.04] to-transparent">
       <div className="max-w-7xl mx-auto px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -464,7 +464,7 @@ function VotePartySection() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-xs font-medium mb-4">
             <Vote size={12} />
             Vote Party System
           </div>
@@ -486,20 +486,20 @@ function VotePartySection() {
           >
             <div className="rounded-xl bg-[#313338] border border-white/[0.04] overflow-hidden shadow-2xl shadow-black/50">
               <div className="px-5 pt-5 pb-1 flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Bot size={18} className="text-black" />
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-700 to-red-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Bot size={18} className="text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-[15px] font-semibold text-white">Nariño</span>
+                    <span className="text-[15px] font-semibold text-white">Castro</span>
                     <span className="px-1 py-0.5 rounded text-[10px] bg-[#5865f2] text-white font-medium">BOT</span>
                     <span className="text-xs text-gray-500">Today at {timeStr}</span>
                   </div>
 
-                  <div className="mt-2 rounded-md overflow-hidden bg-[#2b2d31] border-l-[3px] border-yellow-400">
+                  <div className="mt-2 rounded-md overflow-hidden bg-[#2b2d31] border-l-[3px] border-blue-500">
                     <div className="px-4 py-3">
                       <div className="text-white font-bold text-[15px] mb-2">
-                        🇨🇴 Colombia Vote Party
+                        🇨🇺 Cuba Vote Party
                       </div>
 
                       <div className="text-[#dbdee1] text-[14px] mb-0.5">
@@ -598,8 +598,8 @@ function VotePartySection() {
               { icon: Globe, title: 'Bilingual Support', desc: 'Full EN/ES translations with auto-detection' },
             ].map((feature, i) => (
               <div key={feature.title} className="flex gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.04] transition-all">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-500/20 to-amber-500/20 flex items-center justify-center flex-shrink-0">
-                  <feature.icon size={20} className="text-yellow-400" />
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500/20 to-red-500/20 flex items-center justify-center flex-shrink-0">
+                  <feature.icon size={20} className="text-blue-300" />
                 </div>
                 <div>
                   <h4 className="text-white font-semibold mb-1">{feature.title}</h4>
@@ -653,11 +653,11 @@ function NationFeatures() {
               <h3 className="text-xl font-bold text-white">Interactive Onboarding</h3>
             </div>
             <DiscordEmbed
-              title="🇨🇴 ¡Bienvenido a Colombia, NewMember!"
+              title="🇨🇺 ¡Bienvenido a Cuba, NewMember!"
               description="**Welcome Streak:** 🔥 47 members
 **Member #1,247**
 
-Comrade, you have reached our shores. Whether you come to build a home, stand alongside our people, or speak on behalf of another nation, there is a place for you here.
+¡Qué bueno que estés aquí! Ponte cómodo, conoce a la comunidad y ayuda a construir nuestra nación isleña.
 
 🌟 **Quick Start Guide**
 1️⃣ Read our rules in #rules
@@ -665,8 +665,8 @@ Comrade, you have reached our shores. Whether you come to build a home, stand al
 3️⃣ Request citizenship below
 4️⃣ Join the conversation!
 
-— Nariño 🇨🇴"
-              color={0xF1C40F}
+— Castro 🇨🇺"
+              color={0x002A8F}
             />
             <div className="mt-4 flex flex-wrap gap-2">
               <button className="px-3 py-1.5 rounded-lg bg-[#4e5058] hover:bg-[#6d6f78] text-white text-xs font-medium transition-colors">📜 Read Rules</button>
@@ -676,7 +676,7 @@ Comrade, you have reached our shores. Whether you come to build a home, stand al
             </div>
             <div className="mt-3 p-3 rounded-lg bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20">
               <p className="text-xs text-yellow-400 font-semibold mb-1">🎊 MILESTONE WELCOME!</p>
-              <p className="text-xs text-gray-400">NewMember is member #1,247! +500 Pesos bonus • Exclusive role • Featured in #hall-of-fame</p>
+              <p className="text-xs text-gray-400">NewMember is member #1,247! +500 gold bonus • Milestone role • A warm welcome from the community</p>
             </div>
           </motion.div>
 
@@ -695,7 +695,7 @@ Comrade, you have reached our shores. Whether you come to build a home, stand al
               <h3 className="text-xl font-bold text-white">Advanced Role System</h3>
             </div>
             <DiscordEmbed
-              title="🇨🇴 Colombia Role Requests"
+              title="🇨🇺 Cuba Role Requests"
               description="Choose a role below. Citizenship and Ally requests go to leadership review with multi-step verification.
 
 **Request format:**
@@ -707,7 +707,7 @@ Minecraft username · Nation · Town · Nation role
 3️⃣ Interview (if required)
 4️⃣ Trial period (7 days)
 5️⃣ Full citizenship"
-              color={0xF1C40F}
+              color={0x002A8F}
             />
             <div className="mt-4 flex flex-wrap gap-2">
               <button className="px-4 py-2 rounded-lg bg-[#5865f2] text-white text-sm font-medium">🏠 Request Citizenship</button>
@@ -807,15 +807,15 @@ Minecraft username · Nation · Town · Nation role
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center p-3 rounded-lg bg-white/[0.02]">
-                <span className="text-white text-sm font-medium">🏰 Bogotá</span>
+                <span className="text-white text-sm font-medium">🏰 Santa Clara</span>
                 <span className="text-gray-400 text-xs">45 members</span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-lg bg-white/[0.02]">
-                <span className="text-white text-sm font-medium">🌴 Cartagena</span>
+                <span className="text-white text-sm font-medium">🌴 Havana</span>
                 <span className="text-gray-400 text-xs">32 members</span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-lg bg-white/[0.02]">
-                <span className="text-white text-sm font-medium">⛰️ Medellín</span>
+                <span className="text-white text-sm font-medium">⛰️ Santiago de Cuba</span>
                 <span className="text-gray-400 text-xs">28 members</span>
               </div>
             </div>
@@ -1074,7 +1074,7 @@ function DiplomaticaMCSection() {
                 <div className="text-white font-semibold text-sm mb-2">🛡️ Active Sieges</div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-red-400">🏰 Bogotá</span>
+                    <span className="text-red-400">🏰 Santa Clara</span>
                     <span className="text-gray-400">vs Lima</span>
                     <span className="text-yellow-400">Day 2/3</span>
                   </div>
@@ -1175,10 +1175,10 @@ function DiplomaticaMCSection() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="mt-12 p-6 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-blue-500/10 to-red-500/10 border border-white/[0.06]"
+          className="mt-12 p-6 rounded-2xl bg-gradient-to-r from-red-500/10 via-white/[0.03] to-blue-500/10 border border-white/[0.06]"
         >
           <div className="text-center mb-6">
-            <h3 className="text-2xl font-bold text-white mb-2">🇨🇴 DiplomaticaMC Server Info</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">🇨🇺 DiplomaticaMC Server Info</h3>
             <p className="text-gray-400 text-sm">The ultimate Earth-scale geopolitics sandbox</p>
           </div>
           <div className="grid md:grid-cols-4 gap-4">
@@ -1260,7 +1260,7 @@ function EventsSection() {
               <div className="p-3 rounded-lg bg-white/[0.02]">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-white text-sm font-semibold">🏆 Prize Pool</span>
-                  <span className="text-yellow-400 font-bold">5,000 Pesos</span>
+                  <span className="text-yellow-400 font-bold">5,000 gold</span>
                 </div>
                 <div className="flex gap-2">
                   <span className="text-xs px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">🥇 2,500</span>
@@ -1336,7 +1336,7 @@ function EventsSection() {
                   </div>
                   <span className="text-xs text-blue-400">in 5 days</span>
                 </div>
-                <p className="text-xs text-gray-400 mb-2">5 rounds • Colombia history & culture</p>
+                <p className="text-xs text-gray-400 mb-2">5 rounds • Cuban history & culture</p>
                 <div className="flex gap-2">
                   <button className="text-xs px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 transition-colors">Register</button>
                   <button className="text-xs px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-gray-300 transition-colors">Practice</button>
@@ -1373,19 +1373,19 @@ function Footer() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center">
-              <Bot size={16} className="text-black" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-700 to-red-600 flex items-center justify-center">
+              <Bot size={16} className="text-white" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-white">Nariño Bot</div>
-              <div className="text-xs text-gray-500">The Ultimate Colombia Nation Bot • v1.0.0</div>
+              <div className="text-sm font-semibold text-white">Castro</div>
+              <div className="text-xs text-gray-500">Cuba Nation Bot • DiplomaticaMC</div>
             </div>
           </div>
           <div className="flex items-center gap-6">
             <span className="text-xs text-gray-600">18+ Features • 50+ Commands • Bilingual</span>
             <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-600">🇨🇴</span>
-              <span className="text-xs text-gray-500">Made for Colombia</span>
+              <span className="text-xs text-gray-600">🇨🇺</span>
+              <span className="text-xs text-gray-500">Made for Cuba</span>
             </div>
           </div>
         </div>
