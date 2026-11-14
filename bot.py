@@ -1063,18 +1063,52 @@ class VotePartyCog(commands.Cog):
             ephemeral=True
         )
 
-    @voteparty.command(name="setremaining", description="Set the remaining votes needed")
+        @voteparty.command(name="setremaining", description="Set the remaining votes needed")
     @discord.app_commands.describe(value="New remaining vote count")
     @discord.app_commands.checks.has_permissions(administrator=True)
     async def voteparty_setremaining(self, interaction: discord.Interaction, value: int):
-        """Force the remaining vote count"""
+        """Force remaining by adjusting baseline so the next scrape keeps it."""
+        await interaction.response.defer(ephemeral=True)
+
+        if value < 0 or value > VOTE_GOAL:
+            await interaction.followup.send(
+                f"Value must be between 0 and {VOTE_GOAL}.",
+                ephemeral=True,
+            )
+            return
+
+        # Prefer live scrape so baseline matches what the loop will see next
+        try:
+            counts, total = await self.bot.scraper.scrape_all()
+            for name, count in list(counts.items()):
+                if count is None and name in self.bot.scraper.last_successful_counts:
+                    counts[name] = self.bot.scraper.last_successful_counts[name]
+            total = sum(v for v in counts.values() if v is not None)
+            if total:
+                self.bot.site_counts = counts
+        except Exception:
+            total = sum(v for v in self.bot.site_counts.values() if v is not None)
+
+        if not total:
+            await interaction.followup.send(
+                "No site totals available yet. Wait for a scrape, then try again.",
+                ephemeral=True,
+            )
+            return
+
+        # remaining = GOAL - (total - baseline)  →  baseline = total - (GOAL - value)
+        progress = VOTE_GOAL - value
+        self.bot.baseline = total - progress
         self.bot.remaining = value
+        self.bot.has_ping_sent = value > PING_THRESHOLD
         self.bot._save_vote_state()
         await self.bot._update_embed()
 
-        await interaction.response.send_message(
-            f"✅ Remaining votes set to **{value}**.",
-            ephemeral=True
+        await interaction.followup.send(
+            f"✅ Remaining **{value}** locked in.\n"
+            f"Baseline set to **{self.bot.baseline}** (live total **{total}**).\n"
+            f"Next scrape should keep this number.",
+            ephemeral=True,
         )
 
     @voteparty.command(name="setbaseline", description="Set the baseline, or reset it to the current total")
