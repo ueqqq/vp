@@ -1,252 +1,48 @@
+"""English / Spanish strings for the vote-party replies and help text.
+
+A user's choice is stored with /language. Add a key to both languages and call t(key, lang).
 """
-Advanced i18n system with auto-detection and context-aware translations
-"""
 
-import re
-from typing import Optional
+from __future__ import annotations
 
-from config import BOT_NAME, NATION_FLAG, NATION_NAME
+STRINGS: dict[str, dict[str, str]] = {
+    "en": {
+        "claim_ok": "✅ Vote logged! You've claimed **{n}/{max}** this cycle.",
+        "claim_limit": "You've already claimed {max}/{max} votes this cycle. A new cycle starts after the next vote party.",
+        "claim_cooldown": "⏳ You can claim again <t:{ts}:R>.",
+        "claim_no_ign": "Tip: link your Minecraft name with `/link` so staff can match you in-game.",
+        "notify_on": "🔔 You'll now be pinged when a vote party is close.",
+        "notify_off": "🔕 You won't be pinged for vote parties any more.",
+        "notify_missing": "❌ The vote-party ping role doesn't exist yet. Ask an admin to run `/castro setrole`.",
+        "notify_denied": "❌ I can't assign that role. My role must be above it in the server role list.",
+        "remind_set": "⏰ I'll DM you in 30 minutes to vote again.",
+        "link_ok": "🔗 Linked to **{ign}**.",
+        "link_bad": "❌ That isn't a valid Minecraft username (3–16 letters, numbers or underscores).",
+        "lang_set": "🌐 Language set to English.",
+        "leaderboard_note": "Claims are self-reported.",
+    },
+    "es": {
+        "claim_ok": "✅ ¡Voto registrado! Has reclamado **{n}/{max}** en este ciclo.",
+        "claim_limit": "Ya reclamaste {max}/{max} votos en este ciclo. Un nuevo ciclo empieza tras la próxima vote party.",
+        "claim_cooldown": "⏳ Podrás reclamar otra vez <t:{ts}:R>.",
+        "claim_no_ign": "Consejo: vincula tu nombre de Minecraft con `/link` para que el staff te identifique.",
+        "notify_on": "🔔 Recibirás un aviso cuando una vote party esté cerca.",
+        "notify_off": "🔕 Ya no recibirás avisos de vote party.",
+        "notify_missing": "❌ El rol de avisos aún no existe. Pide a un admin que use `/castro setrole`.",
+        "notify_denied": "❌ No puedo asignar ese rol. Mi rol debe estar por encima en la lista de roles.",
+        "remind_set": "⏰ Te enviaré un MD en 30 minutos para que votes de nuevo.",
+        "link_ok": "🔗 Vinculado a **{ign}**.",
+        "link_bad": "❌ Ese no es un nombre de Minecraft válido (3–16 letras, números o guiones bajos).",
+        "lang_set": "🌐 Idioma cambiado a español.",
+        "leaderboard_note": "Los votos son autodeclarados.",
+    },
+}
 
-class I18n:
-    """Advanced internationalization with auto-detection"""
-    
-    def __init__(self):
-        self.translations = {
-            "en": self._english(),
-            "es": self._spanish()
-        }
-        self.user_langs = {}
-        self.auto_detect_patterns = {
-            "es": [
-                r'\b(hola|buenos|buenas|gracias|por favor|cómo|qué|cuándo|dónde)\b',
-                r'[áéíóúñ]',
-            ]
-        }
-    
-    def _english(self) -> dict:
-        """English translations"""
-        return {
-            # Welcome
-            "welcome_title": "{flag} Welcome to {nation}, {user}!",
-            "welcome_desc": "Welcome to the island, and make yourself at home. Build a town, meet your neighbors, and help our community thrive.\n\n🌟 **A good place to start**\nRead the rules, introduce yourself, and request citizenship when you are ready. Visiting diplomats are welcome, too.\n\n¡Bienvenido a {nation}! 🌴\n— {bot_name}",
-            "welcome_footer": "Citizenship: /role-request · Support: /ticket · Diplomacy: /diplomacy",
-            
-            # Vote Party
-            "vote_party_title": "{flag} {nation} Vote Party",
-            "vote_party_desc": "The community is working together to reach {goal} votes!",
-            "vote_party_complete": "🎉 {flag} {nation} VOTE PARTY COMPLETE! {flag} 🎉",
-            "vote_party_complete_desc": "The community reached **{goal} votes**! Time for the party!",
-            "votes_remaining": "**{remaining}** votes remaining",
-            "votes_collected": "{progress} / {VOTE_GOAL} votes collected",
-            
-            # Status messages
-            "status_complete": "🎉 **Vote Party Complete!**",
-            "status_imminent": "🔥 **Almost there! Party imminent!**",
-            "status_close": "⚡ **Getting close! Notify the server!**",
-            "status_progress": "💪 **Good progress! Keep it up!**",
-            "status_started": "🗳️ **Vote party in progress**",
-            
-            # Buttons
-            "btn_i_voted": "✅ I Voted!",
-            "btn_notify": "🔔 Get Notified",
-            "btn_stop_notify": "🔕 Stop Notifications",
-            "btn_how_to_vote": "📖 How to Vote",
-            "btn_remind_me": "⏰ Remind Me Later",
-            "btn_leaderboard": "🏆 Leaderboard",
-            
-            # Role requests
-            "role_request_title": "{flag} {nation} Role Requests",
-            "role_request_desc": "Choose a role below. Citizenship and Ally requests go to leadership review. Vote Party Pings can be toggled instantly.\n\n**Request format:**\nMinecraft username · Nation · Town · Nation role",
-            "btn_citizen": "🏠 Request Citizenship",
-            "btn_ally": "🤝 Request Ally Status",
-            "btn_diplomat": "🌐 Foreign Diplomat",
-            
-            # Tickets
-            "ticket_title": "🎫 Support Ticket",
-            "ticket_created": "✅ Ticket created! A staff member will be with you shortly.",
-            "ticket_closed": "✅ Ticket closed by {user}",
-            "ticket_already_open": "❌ You already have an open ticket!",
-            
-            # Economy
-            "balance_title": "💰 Your Balance",
-            "balance_desc": "You have **{balance}** {currency}",
-            "daily_reward": "✅ You claimed your daily reward of **{amount}** {currency}!",
-            "daily_already": "❌ You've already claimed your daily reward! Come back in **{time}**.",
-            "work_success": "💼 You worked hard and earned **{amount}** {currency}!",
-            "work_cooldown": "⏰ You need to rest! Try again in **{time}**.",
-            
-            # Moderation
-            "warn_success": "✅ {user} has been warned. They now have **{count}/{max}** warnings.",
-            "warn_max": "🚨 {user} has reached the maximum warnings and has been banned!",
-            "mute_success": "✅ {user} has been muted for **{duration}**.",
-            "ban_success": "✅ {user} has been banned.",
-            
-            # Activity
-            "level_up": "🎉 {user} has reached **Level {level}**!",
-            "leaderboard_title": "🏆 Leaderboard",
-            
-            # Events
-            "giveaway_title": "🎁 Giveaway",
-            "giveaway_ended": "🎁 Giveaway ended!",
-            "giveaway_winner": "🎉 Congratulations {winner}! You won **{prize}**!",
-            
-            # Diplomacy
-            "diplomacy_title": "🌐 Foreign Affairs",
-            "alliance_formed": "🤝 Alliance formed between {nation1} and {nation2}!",
-            "war_declared": "⚔️ {nation1} has declared war on {nation2}!",
-            
-            # Towns
-            "town_created": "✅ Town **{town}** has been created!",
-            "town_joined": "✅ {user} has joined **{town}**!",
-            
-            # Fun
-            "fun_fact_title": "{flag} Did You Know?",
-            "trivia_title": "🧠 {nation} Trivia",
-            "trivia_correct": "✅ Correct! The answer is **{answer}**!",
-            "trivia_wrong": "❌ Wrong! The correct answer is **{answer}**.",
-            
-            # Errors
-            "error_generic": "❌ An error occurred: {error}",
-            "error_no_permission": "❌ You don't have permission to use this command!",
-            "error_invalid_input": "❌ Invalid input. Please try again.",
-            "error_cooldown": "⏰ Please wait **{time}** before using this again.",
-            
-            # General
-            "success": "✅ Success!",
-            "cancelled": "❌ Cancelled.",
-            "timeout": "⏰ Timed out. Please try again.",
-        }
-    
-    def _spanish(self) -> dict:
-        """Spanish translations"""
-        return {
-            # Welcome
-            "welcome_title": "{flag} ¡Bienvenido a {nation}, {user}!",
-            "welcome_desc": "¡Bienvenido a la isla! Ponte cómodo, construye un pueblo, conoce a tus vecinos y ayuda a crecer a nuestra comunidad.\n\n🌟 **Para empezar**\nLee las reglas, preséntate y solicita ciudadanía cuando quieras. Los diplomáticos también son bienvenidos.\n\n¡Bienvenido a {nation}! 🌴\n— {bot_name}",
-            "welcome_footer": "Ciudadanía: /role-request · Soporte: /ticket · Diplomacia: /diplomacy",
-            
-            # Vote Party
-            "vote_party_title": "{flag} Fiesta de Votos de {nation}",
-            "vote_party_desc": "¡La comunidad está trabajando junta para alcanzar {goal} votos!",
-            "vote_party_complete": "🎉 {flag} ¡FIESTA DE VOTOS DE {nation} COMPLETA! {flag} 🎉",
-            "vote_party_complete_desc": "¡La comunidad alcanzó **{goal} votos**! ¡Hora de la fiesta!",
-            "votes_remaining": "**{remaining}** votos restantes",
-            "votes_collected": "{progress} / {VOTE_GOAL} votos recogidos",
-            
-            # Status messages
-            "status_complete": "🎉 **¡Fiesta de Votos Completa!**",
-            "status_imminent": "🔥 **¡Ya casi! ¡Fiesta inminente!**",
-            "status_close": "⚡ **¡Cerca! ¡Avisa al servidor!**",
-            "status_progress": "💪 **¡Buen progreso! ¡Sigue así!**",
-            "status_started": "🗳️ **Fiesta de votos en progreso**",
-            
-            # Buttons
-            "btn_i_voted": "✅ ¡Voté!",
-            "btn_notify": "🔔 Notificarme",
-            "btn_stop_notify": "🔕 Parar Notificaciones",
-            "btn_how_to_vote": "📖 Cómo Votar",
-            "btn_remind_me": "⏰ Recordar Después",
-            "btn_leaderboard": "🏆 Clasificación",
-            
-            # Role requests
-            "role_request_title": "{flag} Solicitudes de Roles de {nation}",
-            "role_request_desc": "Elige un rol abajo. Las solicitudes de Ciudadanía y Aliado van a revisión de liderazgo. Los Pings de Fiesta de Votos se pueden alternar instantáneamente.\n\n**Formato de solicitud:**\nUsuario de Minecraft · Nación · Pueblo · Rol de nación",
-            "btn_citizen": "🏠 Solicitar Ciudadanía",
-            "btn_ally": "🤝 Solicitar Estado de Aliado",
-            "btn_diplomat": "🌐 Diplomático Extranjero",
-            
-            # Tickets
-            "ticket_title": "🎫 Ticket de Soporte",
-            "ticket_created": "✅ ¡Ticket creado! Un miembro del staff estará contigo pronto.",
-            "ticket_closed": "✅ Ticket cerrado por {user}",
-            "ticket_already_open": "❌ ¡Ya tienes un ticket abierto!",
-            
-            # Economy
-            "balance_title": "💰 Tu Balance",
-            "balance_desc": "Tienes **{balance}** {currency}",
-            "daily_reward": "✅ ¡Reclamaste tu recompensa diaria de **{amount}** {currency}!",
-            "daily_already": "❌ ¡Ya reclamaste tu recompensa diaria! Vuelve en **{time}**.",
-            "work_success": "💼 ¡Trabajaste duro y ganaste **{amount}** {currency}!",
-            "work_cooldown": "⏰ ¡Necesitas descansar! Intenta de nuevo en **{time}**.",
-            
-            # Moderation
-            "warn_success": "✅ {user} ha sido advertido. Ahora tiene **{count}/{max}** advertencias.",
-            "warn_max": "🚨 ¡{user} ha alcanzado el máximo de advertencias y ha sido baneado!",
-            "mute_success": "✅ {user} ha sido silenciado por **{duration}**.",
-            "ban_success": "✅ {user} ha sido baneado.",
-            
-            # Activity
-            "level_up": "🎉 ¡{user} ha alcanzado el **Nivel {level}**!",
-            "leaderboard_title": "🏆 Clasificación",
-            
-            # Events
-            "giveaway_title": "🎁 Sorteo",
-            "giveaway_ended": "🎁 ¡Sorteo terminado!",
-            "giveaway_winner": "🎉 ¡Felicidades {winner}! ¡Ganaste **{prize}**!",
-            
-            # Diplomacy
-            "diplomacy_title": "🌐 Asuntos Exteriores",
-            "alliance_formed": "🤝 ¡Alianza formada entre {nation1} y {nation2}!",
-            "war_declared": "⚔️ ¡{nation1} ha declarado guerra a {nation2}!",
-            
-            # Towns
-            "town_created": "✅ ¡El pueblo **{town}** ha sido creado!",
-            "town_joined": "✅ ¡{user} se ha unido a **{town}**!",
-            
-            # Fun
-            "fun_fact_title": "{flag} ¿Sabías que?",
-            "trivia_title": "🧠 Trivia de {nation}",
-            "trivia_correct": "✅ ¡Correcto! La respuesta es **{answer}**!",
-            "trivia_wrong": "❌ ¡Incorrecto! La respuesta correcta es **{answer}**.",
-            
-            # Errors
-            "error_generic": "❌ Ocurrió un error: {error}",
-            "error_no_permission": "❌ ¡No tienes permiso para usar este comando!",
-            "error_invalid_input": "❌ Entrada inválida. Por favor intenta de nuevo.",
-            "error_cooldown": "⏰ Por favor espera **{time}** antes de usar esto de nuevo.",
-            
-            # General
-            "success": "✅ ¡Éxito!",
-            "cancelled": "❌ Cancelado.",
-            "timeout": "⏰ Tiempo agotado. Por favor intenta de nuevo.",
-        }
-    
-    def get(self, key: str, lang: str = "en", **kwargs) -> str:
-        """Get translation with optional formatting"""
-        if lang not in self.translations:
-            lang = "en"
-        
-        text = self.translations[lang].get(key, self.translations["en"].get(key, key))
-        kwargs.setdefault("bot_name", BOT_NAME)
-        kwargs.setdefault("flag", NATION_FLAG)
-        kwargs.setdefault("nation", NATION_NAME)
-        
-        if kwargs:
-            try:
-                return text.format(**kwargs)
-            except (KeyError, IndexError):
-                return text
-        
-        return text
-    
-    def detect_language(self, text: str) -> str:
-        """Auto-detect language from text"""
-        text_lower = text.lower()
-        
-        for lang, patterns in self.auto_detect_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, text_lower):
-                    return lang
-        
-        return "en"
-    
-    def set_user_lang(self, user_id: int, lang: str):
-        """Set user's preferred language"""
-        self.user_langs[user_id] = lang
-    
-    def get_user_lang(self, user_id: int) -> str:
-        """Get user's preferred language"""
-        return self.user_langs.get(user_id, "en")
+from core.cuba import FACTS  # noqa: E402
 
-# Global instance
-i18n = I18n()
+FUN_FACTS = {"en": [f["en"] for f in FACTS], "es": [f["es"] for f in FACTS]}
+
+
+def t(key: str, lang: str = "en", **kwargs) -> str:
+    text = STRINGS.get(lang, STRINGS["en"]).get(key) or STRINGS["en"].get(key, key)
+    return text.format(**kwargs) if kwargs else text

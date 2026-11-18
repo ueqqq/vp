@@ -1,433 +1,96 @@
-# 🇨🇺 Castro — Cuba Nation Bot
+# 🇨🇺 Castro: Cuba nation bot for DiplomaticaMC
 
-A Discord companion for the Cuba nation on DiplomaticaMC, with Cuban-themed onboarding, vote parties, Towny features, and a gold-standard economy.
+A full nation bot, not just a vote tracker: citizen profiles and roster, decrees and citizen polls,
+a treaty register, applications, private support tickets, a nation directory, the vote-party tracker,
+a daily quote, and EN/ES replies. Slash commands and buttons only.
 
-## 🎯 Features
-
-### ✅ Vote Party System (Enhanced)
-- **99%+ accuracy** scraper with triple-layer extraction
-- **3 votes per cycle** limit (no farming!)
-- **Leaderboards** and personal stats
-- **Bilingual support** (EN/ES)
-- **Auto-delete confirmations** (1 second)
-- **Advanced analytics** and voting rate tracking
-
-### 🎉 Welcome Messages
-- Cuban-themed welcome embed
-- Auto-detects new members
-- Links to role requests, tickets, diplomacy
-
-### 🎭 Role Requests
-- **Citizenship** → Leadership review
-- **Ally Status** → Leadership review
-- **Vote Party Pings** → Instant toggle
-- Request format: `Minecraft username · Nation · Town · Nation role`
-
-### 🎫 Support Tickets
-- `/ticket` command to open support ticket
-- Creates private channel
-- Staff can respond
-- Close/archive tickets
-
-### 💰 Economy System
-- Gold-standard economy (Gold 🪙)
-- Daily rewards
-- Work command
-- Balance tracking
-
-### 🧠 Fun Features
-- Cuban fun facts (bilingual)
-- Interactive commands
-
-### 🌐 Diplomacy (Coming Soon)
-- Alliance tracking
-- War declarations
-- Peace treaties
-- Diplomatic relations
-
-### 🏘️ Town Management (Coming Soon)
-- Town tracking
-- Town leaderboards
-- Town-specific channels
-
-### 🎮 Activity Tracking (Coming Soon)
-- XP system
-- Levels
-- Activity leaderboards
-- Inactive member cleanup
-
-### 🛡️ Moderation (Coming Soon)
-- Auto-mod
-- Warning system
-- Temp mute/ban
-- Mod logs
-
-### 🎁 Events (Coming Soon)
-- Giveaways
-- Tournaments
-- Attendance tracking
-
----
-
-## 🏗️ Architecture
-
-```
-narino-bot/
-├── bot.py                      # Main entry point
-├── config.py                   # All configuration
-├── requirements.txt            # Dependencies
-├── start.sh                    # Startup script
-│
-├── core/                       # Core systems
-│   ├── __init__.py
-│   ├── data_manager.py         # Advanced data persistence
-│   └── i18n.py                 # Bilingual support
-│
-├── vote/                       # Vote Party system
-│   ├── __init__.py
-│   └── scraper.py              # Advanced vote scraper
-│
-└── data/                       # Auto-generated data files
-    ├── bot_data.json
-    ├── player_data.json
-    ├── stats.json
-    ├── economy.json
-    └── ...
-```
-
----
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+## Run it
 ```bash
 pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-```bash
-export DISCORD_BOT_TOKEN='your_bot_token_here'
-```
-
-### 3. Create Discord Bot
-1. Go to https://discord.com/developers/applications
-2. Create a new application
-3. Go to "Bot" tab and create a bot
-4. Copy the bot token
-5. Enable these **Privileged Gateway Intents**:
-   - ✅ MESSAGE CONTENT INTENT
-   - ✅ SERVER MEMBERS INTENT
-6. Invite the bot with these permissions:
-   - Send Messages
-   - Embed Links
-   - Manage Roles
-   - Use Slash Commands
-   - Read Message History
-   - Manage Messages (for auto-delete)
-
-### 4. Create Required Roles
-Create these roles in your server:
-- `Nation Member` - For citizens
-- `Ally` - For allied nations
-- `VP` - For vote party notifications
-- `Verified` - For verified members
-- `Staff` - For ticket handlers
-- `Leadership` - For role request reviewers
-
-**Important:** Make sure the bot's role is **above** these roles in the role hierarchy.
-
-### 5. Run the Bot
-```bash
+cp .env.example .env        # put your bot token in it
 python bot.py
 ```
-
-### 6. Setup the Tracker
-In Discord, use the command:
-```
-/voteparty setup
-```
-
-This will post the vote party tracker embed in the current channel.
-
----
-
-## 📋 Commands
-
-### Vote Party Commands
-| Command | Description |
-|---------|-------------|
-| `/link <ign>` | Link your Minecraft username |
-| `/myvotes` | View your personal vote stats |
-| `/leaderboard` | View the vote leaderboard |
-| `/voteparty setup` | Post/update tracker embed (Admin) |
-| `/voteparty setremaining <value>` | Set remaining votes (Admin) |
-| `/voteparty setbaseline [value]` | Reset cycle baseline (Admin) |
-| `/voteparty forceupdate` | Force immediate update (Admin) |
-| `/voteparty fixbaseline` | Fix corrupted baseline (Admin) |
-| `/voteparty scraperstats` | View scraper statistics (Admin) |
-
-### Nation Commands
-| Command | Description |
-|---------|-------------|
-| `/role-request` | Show role request panel |
-| `/ticket` | Open a support ticket |
-| `/diplomacy` | Open diplomatic request |
-
-### Economy Commands
-| Command | Description |
-|---------|-------------|
-| `/balance` | Check your balance |
-| `/daily` | Claim daily reward |
-| `/work` | Work to earn money |
-
-### Fun Commands
-| Command | Description |
-|---------|-------------|
-| `/funfact` | Get a fun fact about Cuba |
-
----
-
-## 🎨 Interactive Buttons
-
-### Vote Party Buttons
-- ✅ **I Voted!** - Claim your vote (3 per cycle)
-- 🔔 **Get Notified** - Toggle VP role notifications
-- 📖 **How to Vote** - Vote guide with links
-- ⏰ **Remind Me** - Get a DM reminder in 30min
-- 🏆 **Leaderboard** - View top voters
-
-### Role Request Buttons
-- 🏠 **Request Citizenship** - Open citizenship modal
-- 🤝 **Request Ally Status** - Open ally modal
-- 🔔 **Toggle Vote Party Pings** - Instant VP role toggle
-
----
-
-## 🔧 Configuration
-
-Edit `config.py` to customize:
-
-### Vote Party
-```python
-VOTE_GOAL = 250              # Target votes
-SCRAPE_INTERVAL_SECONDS = 15 # Scrape frequency
-PING_THRESHOLD = 30          # When to ping VP role
-MAX_VOTES_PER_CYCLE = 3      # Max votes per player per cycle
-```
-
-### Economy
-```python
-STARTING_BALANCE = 100       # Starting money
-VOTE_REWARD = 50             # Reward for voting
-CURRENCY_NAME = "Gold"       # Currency name
-CURRENCY_EMOJI = "🪙"        # Currency emoji
-```
-
-### Roles
-```python
-NATION_MEMBER_ROLE = "Nation Member"
-ALLY_ROLE = "Ally"
-VP_ROLE = "VP"
-VERIFIED_ROLE = "Verified"
-STAFF_ROLE = "Staff"
-LEADERSHIP_ROLE = "Leadership"
-```
-
----
-
-## 📊 Data Files
-
-The bot automatically creates these files in the `data/` directory:
-
-- `bot_data.json` - Bot state and configuration
-- `player_data.json` - Player votes, cooldowns, streaks
-- `stats.json` - Historical statistics
-- `economy.json` - Player balances
-- `tickets.json` - Support tickets
-- `diplomacy.json` - Diplomatic relations
-- `towns.json` - Town data
-- `events.json` - Event data
-- `modlog.json` - Moderation logs
-
-**Note:** These files are auto-generated and should not be edited manually.
-
----
-
-## 🌐 Bilingual Support
-
-The bot supports both **English** and **Spanish**. Users can set their preference with:
-
-```
-/language en  # English
-/language es  # Español
-```
-
-All commands, embeds, buttons, and messages are fully translated.
-
----
-
-## 🎯 Advanced Features
-
-### Vote Scraper
-- **Triple-layer extraction** (BeautifulSoup + Regex + Playwright)
-- **4 retry attempts** with exponential backoff
-- **User-agent rotation** to prevent blocking
-- **Consecutive failure tracking**
-- **Comprehensive caching**
-- **Real-time monitoring** (`/voteparty scraperstats`)
-
-### Data Manager
-- **Advanced JSON persistence** with caching
-- **Auto-save every 30 seconds**
-- **Dirty tracking** for efficient saves
-- **Search and filter** capabilities
-- **Increment/decrement** operations
-
-### I18n System
-- **Auto-detection** of language from message content
-- **Context-aware translations**
-- **User preference storage**
-- **Fallback to English** if translation missing
-
----
-
-## 🐛 Troubleshooting
-
-### Bot not responding to commands
-- Check if bot is online in Discord
-- Restart bot
-- Check Discord bot token is set
-- Verify bot has proper permissions
-
-### "⚠️ Unavailable" for vote sites
-- Check if sites are actually down (visit URLs manually)
-- Run `/voteparty scraperstats` to see error details
-- Check logs for specific error messages
-- Sites may have changed HTML - need to update selectors
-
-### Baseline corrupted (impossible vote counts)
-- Run `/voteparty fixbaseline`
-- Manually check vote counts on all 3 sites
-- Calculate total (should be ~13,000-14,000)
-- Run `/voteparty setbaseline [total]`
-
-### Brotli compression error
-- Make sure `Brotli>=1.1.0` is in requirements.txt
-- Run `pip install -r requirements.txt`
-- Restart bot
-
----
-
-## 📈 Monitoring
-
-### Daily Check
-Run `/voteparty scraperstats` to verify:
-- ✅ All 3 sites show success rates >90%
-- ✅ No consecutive failures
-- ✅ Baseline and remaining look correct
-
-### Weekly Check
-- Review scraper success rates
-- Check for any site changes
-- Verify vote party tracking is working
-
-### Log Messages to Watch
-```
-✅ "Found X votes (BeautifulSoup)" - Success
-⚠️ "Only X/3 sites returned data" - Partial failure
-❌ "Invalid remaining value" - Corrupted baseline
-⚠️ "X consecutive failures" - Site down
-```
-
----
-
-## 🔮 Future Features
-
-These features are planned for future updates:
-
-### Diplomacy System
-- Alliance tracking between nations
-- War declarations and peace treaties
-- Diplomatic relations status
-- Foreign affairs channels
-
-### Town Management
-- Town creation and management
-- Town leaderboards
-- Town-specific channels
-- Town statistics
-
-### Activity Tracking
-- XP system for messages and voice
-- Level-up rewards
-- Activity leaderboards
-- Inactive member cleanup
-
-### Moderation
-- Auto-moderation (filter bad words, spam)
-- Warning system with expiration
-- Temp mute/ban commands
-- Comprehensive mod logs
-
-### Events
-- Giveaway system
-- Tournament management
-- Event attendance tracking
-- Event announcements
-
-### Minecraft Integration
-- Server status display
-- Role sync between Discord and MC
-- In-game commands
-- Player verification
-
----
-
-## 🤝 Contributing
-
-This is a custom bot for the Cuba nation on DiplomaticaMC. If you want to contribute:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
----
-
-## 📜 License
-
-MIT License - Feel free to modify and use for your own nation bot!
-
----
-
-## 🎉 Credits
-
-**Bot Name:** Castro  
-**Nation:** Cuba 🇨🇺  
-**Server:** DiplomaticaMC  
-**Created By:** Cuba Nation Admin Team  
-
----
-
-## 📞 Support
-
-If you need help:
-1. Check the troubleshooting section above
-2. Review the logs on your hosting panel
-3. Run `/voteparty scraperstats` for diagnostics
-4. Check the Discord bot permissions
-
----
-
-## 🚀 Ready to Go!
-
-Castro is ready to serve the Cuba nation!
-
-**Next steps:**
-1. ✅ Push code to GitHub
-2. ✅ Restart bot on your hosting panel
-3. ✅ Run `/voteparty setup` in Discord
-4. ✅ Test all commands
-5. ✅ Enjoy your Cuba nation bot! 🇨🇺
-
-¡Bienvenido a Cuba! 🌴
+In the Discord developer portal enable the **Server Members Intent** (and nothing else privileged;
+Castro does not read message content). Invite with the `bot` and `applications.commands` scopes and
+the permissions: Manage Roles, Manage Channels, Send Messages, Embed Links, Read Message History.
+Put the bot's role **above** the Citizen / Ally / VP roles.
+
+## First-time setup (all inside Discord)
+1. `/castro status` shows a checklist of what's configured.
+2. `/castro setchannel` for: welcome, quotes, votes, applications, decrees, treaties, logs, ticket category.
+   (Decrees and treaties fall back to the channel you run the command in if unset; polls post where you create them.)
+3. `/castro setrole` for any role not named exactly Staff / Leadership / Nation Member / Ally / VP.
+4. Post panels where you want them: `/castro panel hub|support|nation`, and `/voteparty setup` for the tracker.
+5. Fill the directory: `/nation edit`, `/nation town add`, `/nation gov set`, `/nation relation set`.
+6. `/voteparty status` should show every vote site succeeding. If one fails, its error is listed there.
+
+## Commands
+| Who | Command |
+|---|---|
+| Everyone | `/help` `/profile view\|edit` `/roster` `/decree list\|view` `/poll results` `/treaty list\|view` `/nation view` `/link` `/myvotes` `/leaderboard` `/quote today` `/cuba fact\|slang\|word\|dish\|music` `/funfact` `/language` `/play` `/skip` `/queue` `/nowplaying` `/pause` `/resume` `/stop` `/leave` |
+| Citizens | vote on polls with the buttons (if a Citizen role is configured, only citizens can vote) |
+| Leadership | `/decree publish\|repeal` · `/poll create\|close` · `/treaty add\|update` · `/profile fix` · `/nation edit` · `/nation town add\|remove` · `/nation gov set\|remove` · `/nation relation set\|remove` |
+| Staff | `/quote add\|remove\|list\|post` |
+| Admin | `/castro setchannel\|setrole\|panel\|status\|sync` · `/castro settings\|set\|reset\|preview` · `/voteparty setup\|forceupdate\|setremaining\|rebase\|status` |
+
+## Settings: change almost anything from Discord
+Run **`/castro settings`** for a panel with seven categories. Pick a category, pick a setting, edit it in a form.
+Changes apply immediately, and ✏️ marks anything you've customised. `/castro set` and `/castro reset`
+(with autocomplete) do the same from the keyboard, and `/castro preview` shows how a message will look.
+
+| Category | What you can change |
+|---|---|
+| 🇨🇺 Identity & look | Nation name, flag emoji, motto, color theme (`bandera` `roja` `palma` `dorada`), a custom hex color, default language |
+| 🗳️ Vote party | Votes per party, ping threshold, polling speeds, claims per cycle, claim cooldown, ping/celebration messages, how long pings last |
+| 👋 Welcome & support | Welcome title and message, support panel text (templates with `{name}` `{mention}` `{nation}` `{flag}` `{server}`) |
+| 📜 Quotes & culture | Quote hour and timezone (e.g. `America/Havana`), optional daily Cuban word |
+| 🏛️ Government | Default poll length, citizens-only polls |
+| 🧩 Features on/off | Vote party, quotes, music, welcome, tickets |
+| 🎶 Bot status | Rotating status lines ("watching: over {nation} {flag}") |
+
+Templates are checked when you save them: an unknown placeholder is rejected with the list of valid ones,
+so a typo can't break a message. Values in `.env` are now just the starting defaults.
+Settings are stored per server in `data/settings.json`.
+
+## Cuban culture
+`/cuba fact`, `slang`, `word`, `dish` and `music` serve bilingual (English/Español) content from
+`core/cuba.py`, which is plain data that's easy to extend. `/cuba slang asere` looks up a word, accents optional.
+Turn on **Daily Cuban word** to post a *palabra del día* with the quote. The slang list covers common everyday
+Cuban usage; regional use varies, so have a Cuban member review anything you add.
+
+## Music
+`/play` needs **ffmpeg** installed on the host plus `yt-dlp` and `PyNaCl` (in requirements). Streaming from
+YouTube may break their terms of service and music bots tend to be shut down, so use it with that in mind.
+
+## Government and diplomacy
+* **Decrees** are numbered, posted to the decrees channel, and can be repealed (the original post is
+  updated and greyed out, never deleted, so the record stays intact).
+* **Polls** run 1 to 168 hours, allow one changeable vote per member, close automatically, and show a
+  winner or a tie. Votes are recorded per member, so they are **not secret ballots**; the poll says so.
+* **Treaties** keep a register with type, status and a history of status changes, and post a live
+  embed that updates when the status does.
+
+## How the vote tracker stays honest
+* Vote-site totals are all-time counters, so a reading that goes **down** is rejected as a bad scrape.
+* A huge single jump must be seen twice before it's trusted.
+* A site that stops responding keeps its last number but is shown with ⚠️ and a data warning.
+* Polling is every 30 s, dropping to 15 s once the party is within the ping threshold (both configurable in `.env`).
+* The first cycle starts only after every site has been read once. Use `/voteparty setremaining`
+  to match the real count if you're starting mid-cycle.
+* "I voted" is **self-reported** (3 per cycle, 1 hour apart). The bot can't verify who voted, and the leaderboard says so.
+
+## Data
+Everything lives in `data/*.json`, written atomically and flushed every 10 s and on shutdown.
+A corrupt file is moved aside (`*.corrupt-<time>.json`), never silently replaced. Back up `data/`.
+
+## Tests
+`python -m unittest discover -s tests` covers the vote engine, claim limits, page parsing, poll logic and the store.
+
+## Not built yet
+Treasury/tax ledger and elections. A ledger needs careful audit rules to be trusted, and elections
+need decisions about who can run and vote. Both are good next steps.
+
+## Not included (on purpose)
+The old gold economy, fake Towny/siege/war commands and trivia tracked numbers inside the bot that
+don't exist in the real game, so they were dropped rather than carried over. Real DiplomaticaMC
+data would need an official data source to read from. Easy to add back if you want them.
