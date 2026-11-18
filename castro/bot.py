@@ -17,7 +17,8 @@ from core.ui import reply
 log = logging.getLogger("castro")
 
 EXTENSIONS = ["cogs.votes", "cogs.hub", "cogs.applications", "cogs.support", "cogs.nation",
-              "cogs.citizens", "cogs.government", "cogs.diplomacy", "cogs.quotes", "cogs.fun", "cogs.admin"]
+              "cogs.citizens", "cogs.government", "cogs.diplomacy", "cogs.quotes", "cogs.fun",
+              "cogs.music", "cogs.admin"]
 
 
 class CastroBot(commands.Bot):

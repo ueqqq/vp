@@ -26,10 +26,10 @@ except ImportError:  # pragma: no cover
 log = logging.getLogger("castro.quotes")
 
 SEED = [
-    ("Weapons are no more powerful than ideas.", "English translation · excerpt · July 26, 2002"),
-    ("Without the memory of your sacrifices of yesterday, our dreams of today would be impossible.", "English translation · excerpt · July 26, 2002"),
-    ("I believe ideas prevail over force.", "English translation · excerpt · Buenos Aires speech, 2003"),
-    ("Doctors, not bombs. Doctors, not smart weapons.", "English translation · excerpt · Buenos Aires speech, 2003"),
+    ("Weapons are no more powerful than ideas.", "English translation · excerpt · July 26, 2002", None),
+    ("Without the memory of your sacrifices of yesterday, our dreams of today would be impossible.", "English translation · excerpt · July 26, 2002", None),
+    ("I believe ideas prevail over force.", "English translation · excerpt · Buenos Aires speech, 2003", None),
+    ("Doctors, not bombs. Doctors, not smart weapons.", "English translation · excerpt · Buenos Aires speech, 2003", "https://en.granma.cu/cuba/2020-03-26/doctors-not-bombs"),
 ]
 
 
@@ -62,8 +62,8 @@ class Quotes(commands.Cog):
         self.bot = bot
         self.data = bot.store.data("quotes", {"next": 1, "items": [], "used": [], "last_id": None, "last_posted": None})
         if not self.data["items"] and self.data["next"] == 1:
-            for text, note in SEED:
-                self.add(text, "Fidel Castro", note, None)
+            for text, note, source in SEED:
+                self.add(text, "Fidel Castro", note, source)
 
     async def cog_load(self):
         self.tick.start()
@@ -89,12 +89,16 @@ class Quotes(commands.Cog):
         return random.choice(fresh)
 
     def build(self, q: dict) -> discord.Embed:
-        lines = [f"“{q['text']}”", f"— **{q['author']}**"]
+        # Format matching classic "Quote of the Day" style
+        description = f"“{q['text']}”\n\n— **{q['author']}**"
         if q.get("note"):
-            lines.append(f"*{q['note']}*")
+            description += f"\n*{q['note']}*"
         if q.get("source"):
-            lines.append(f"[Source]({q['source']})")
-        return embed(f"{cfg.NATION_FLAG} Quote of the Day", "\n".join(lines), cfg.RED)
+            description += f"\n\n[Source]({q['source']})"
+        em = embed(f"{cfg.NATION_FLAG} Quote of the Day", description, cfg.RED)
+        em.set_footer(text=f"{cfg.NATION_NAME} · Quote of the Day")
+        return em
+
 
     async def post_today(self, force: bool = False) -> bool:
         q = self.pick()

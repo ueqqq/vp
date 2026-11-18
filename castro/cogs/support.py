@@ -16,9 +16,9 @@ from core.ui import embed, reply, stamp
 log = logging.getLogger("castro.support")
 
 
-class TicketModal(discord.ui.Modal, title="Nation support"):
-    subject = discord.ui.TextInput(label="What do you need help with?", max_length=100)
-    details = discord.ui.TextInput(label="Details", style=discord.TextStyle.paragraph, required=False, max_length=1000)
+class TicketModal(discord.ui.Modal, title="Nation Support Ticket"):
+    subject = discord.ui.TextInput(label="Subject", max_length=100)
+    details = discord.ui.TextInput(label="Details (optional)", style=discord.TextStyle.paragraph, required=False, max_length=1000)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.client.get_cog("Support").open_ticket(interaction, self.subject.value, self.details.value)
@@ -28,11 +28,11 @@ class SupportView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Open Nation Support", style=discord.ButtonStyle.primary, custom_id="castro:support:open")
+    @discord.ui.button(label="Open Ticket", style=discord.ButtonStyle.primary, custom_id="castro:support:open")
     async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(TicketModal())
 
-    @discord.ui.button(label="Apply for government", style=discord.ButtonStyle.secondary, custom_id="castro:support:gov")
+    @discord.ui.button(label="Apply for Government", style=discord.ButtonStyle.secondary, custom_id="castro:support:gov")
     async def gov(self, interaction: discord.Interaction, button: discord.ui.Button):
         from cogs.applications import ApplicationModal
         await interaction.response.send_modal(ApplicationModal("government"))
@@ -42,7 +42,7 @@ class TicketCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Close ticket", emoji="🔒", style=discord.ButtonStyle.danger, custom_id="castro:ticket:close")
+    @discord.ui.button(label="Close Ticket", emoji="🔒", style=discord.ButtonStyle.danger, custom_id="castro:ticket:close")
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.client.get_cog("Support").close_ticket(interaction)
 
@@ -56,10 +56,16 @@ class Support(commands.Cog):
         self.bot.add_view(TicketCloseView())
 
     def panel_embed(self) -> discord.Embed:
-        return embed(f"{cfg.NATION_FLAG} Nation Support",
-                     "Need help from leadership or staff? Open a **private ticket** and we'll get back to you.\n\n"
-                     "Want to serve the nation? **Apply for government.** Applications are reviewed privately, "
-                     "and being accepted doesn't automatically grant a role.", cfg.BLUE)
+        em = embed(
+            f"{cfg.NATION_FLAG} Nation Support",
+            "Need help from leadership or staff?\n"
+            "Open a **private ticket** and we will get back to you.\n\n"
+            "Want to serve the nation?\n"
+            "**Apply for government** — applications are reviewed privately.",
+            cfg.BLUE,
+        )
+        em.set_footer(text=f"{cfg.NATION_NAME} · Support & Government Applications")
+        return em
 
     async def post_panel(self, channel: discord.abc.Messageable) -> None:
         await channel.send(embed=self.panel_embed(), view=SupportView())
