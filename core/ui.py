@@ -20,17 +20,20 @@ def embed(
 
 
 def success(title: str, description: str | None = None) -> discord.Embed:
-    em = embed(f"✅ {title}", description, cfg.GREEN)
-    return em
+    return embed(f"✅ {title}", description, cfg.GREEN)
 
 
 def error(title: str, description: str | None = None) -> discord.Embed:
-    em = embed(f"❌ {title}", description, cfg.RED)
-    return em
+    return embed(f"❌ {title}", description, cfg.RED)
 
 
 def info(title: str, description: str | None = None) -> discord.Embed:
     return embed(title, description, cfg.BLUE)
+
+
+def ok_es(title: str, description: str | None = None) -> discord.Embed:
+    """Success embed with a light Cuban touch for bilingual flows."""
+    return embed(f"✅ {title}", description, cfg.GREEN)
 
 
 class ModuleDisabled(app_commands.CheckFailure):
@@ -57,7 +60,10 @@ def nation(title: str, description: str | None = None, guild_id: int | None = No
     """Standard nation-branded embed (accent color, flag, footer), using the server's own settings."""
     i = ident(guild_id)
     em = embed(f"{i.flag} {title}", description, i.accent)
-    em.set_footer(text=f"{i.name} · Castro v{cfg.VERSION}")
+    foot = f"{i.name} · Castro v{cfg.VERSION}"
+    if i.motto:
+        foot = f"{i.motto} · {foot}"
+    em.set_footer(text=foot[:2048])
     return em
 
 
@@ -94,7 +100,7 @@ async def reply_err(interaction: discord.Interaction, message: str) -> None:
 def admin_only():
     async def predicate(interaction: discord.Interaction) -> bool:
         if not interaction.client.settings.is_admin(interaction.user):
-            await reply(interaction, embed=error("Permission denied", "Administrators only."))
+            await reply(interaction, embed=error("Sin permiso", "Solo administradores. · Administrators only."))
             return False
         return True
     return app_commands.check(predicate)
@@ -103,7 +109,10 @@ def admin_only():
 def leadership_only():
     async def predicate(interaction: discord.Interaction) -> bool:
         if not interaction.client.settings.is_leadership(interaction.user):
-            await reply(interaction, embed=error("Permission denied", "Leadership or administrators only."))
+            await reply(interaction, embed=error(
+                "Sin permiso",
+                "Solo liderazgo o administradores. · Leadership or administrators only.",
+            ))
             return False
         return True
     return app_commands.check(predicate)
@@ -112,7 +121,10 @@ def leadership_only():
 def staff_only():
     async def predicate(interaction: discord.Interaction) -> bool:
         if not interaction.client.settings.is_staff(interaction.user):
-            await reply(interaction, embed=error("Permission denied", "Staff, leadership or administrators only."))
+            await reply(interaction, embed=error(
+                "Sin permiso",
+                "Solo staff, liderazgo o administradores. · Staff, leadership or administrators only.",
+            ))
             return False
         return True
     return app_commands.check(predicate)

@@ -120,6 +120,13 @@ class Music(commands.Cog):
             player.current = None
             player.playing = False
             return
+        if not player.voice or not player.voice.is_connected():
+            # Voice was lost (kicked, disconnect, leave). Clear state instead of crashing.
+            player.queue.clear()
+            player.current = None
+            player.playing = False
+            player.voice = None
+            return
         track = player.queue.popleft()
         player.current = track
         player.playing = True
@@ -127,7 +134,10 @@ class Music(commands.Cog):
         def after_play(err):
             if err:
                 log.error("player error: %s", err)
-            asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+            try:
+                asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+            except RuntimeError:
+                pass  # event loop already closed on shutdown
 
         try:
             source = discord.FFmpegPCMAudio(track.url, **FFMPEG_OPTS)
@@ -202,7 +212,7 @@ class Music(commands.Cog):
             player.voice.resume()
             await reply(interaction, embed=success("Resumed", "Playback continues."))
         else:
-            await reply(interaction, "Nothing is paused.")
+            await reply(interaction, embed=error("Nothing paused", "There is nothing paused right now."))
 
     @app_commands.command(name="queue", description="Show the current queue")
     async def queue(self, interaction: discord.Interaction):

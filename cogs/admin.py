@@ -110,7 +110,7 @@ class Admin(commands.Cog):
             r = s.role(g, key)
             roles.append(f"{'✅' if r else '❌'} **{label}** — {r.mention if r else '*not found*'}")
 
-        em = nation("Castro Setup Checklist")
+        em = nation("Castro Setup Checklist", guild_id=g.id)
         em.description = (
             f"Server: **{g.name}**\n"
             f"Version: `{cfg.VERSION}`\n\n"
@@ -161,7 +161,7 @@ class Admin(commands.Cog):
             return await reply(interaction, embed=embed(f"❌ {BY_KEY[setting].label}", message, cfg.RED))
         self.bot.setting_changed(interaction.guild_id, setting)
         shown = display_value(BY_KEY[setting], self.bot.settings.get(interaction.guild_id, setting))
-        await reply(interaction, embed=success(BY_KEY[setting].label, f"Now: {shown}"))
+        await reply(interaction, embed=success(f"{BY_KEY[setting].label}", f"**Now:** {shown}"))
 
     @castro.command(name="reset", description="Put a setting back to its default")
     @app_commands.describe(setting="Which setting")
@@ -171,14 +171,20 @@ class Admin(commands.Cog):
             return await reply(interaction, embed=embed("❌ Unknown setting", "Start typing to pick one from the list.", cfg.RED))
         changed = self.bot.settings.reset(interaction.guild_id, setting)
         self.bot.setting_changed(interaction.guild_id, setting)
-        await reply(interaction, embed=success(BY_KEY[setting].label, "Back to the default." if changed else "It was already the default."))
+        await reply(interaction, embed=success(
+            BY_KEY[setting].label,
+            "Restored to the default." if changed else "It was already the default.",
+        ))
 
     @set_value.autocomplete("setting")
     @reset_value.autocomplete("setting")
     async def _setting_names(self, interaction: discord.Interaction, current: str):
-        current = current.lower()
-        return [app_commands.Choice(name=f"{s.label} ({s.key})"[:100], value=s.key) for s in SETTINGS
-                if current in s.key.lower() or current in s.label.lower()][:25]
+        current = (current or "").lower().strip()
+        # Discord only allows 25 choices. Prefer matches on key/label; if nothing typed,
+        # return a stable alphabetical slice so every setting is still reachable by typing.
+        matches = [s for s in SETTINGS if not current or current in s.key.lower() or current in s.label.lower()]
+        matches.sort(key=lambda s: (s.group, s.label.lower()))
+        return [app_commands.Choice(name=f"{s.label} ({s.key})"[:100], value=s.key) for s in matches[:25]]
 
     @castro.command(name="preview", description="See how a customizable message will look")
     @app_commands.describe(what="Which message to preview")

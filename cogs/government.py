@@ -77,11 +77,21 @@ class Government(commands.Cog):
     # ── decrees ───────────────────────────────────────────────────────────────
     def decree_embed(self, d: dict) -> discord.Embed:
         repealed = d["status"] == "repealed"
-        em = embed(f"📜 Decree #{d['id']}: {d['title']}", d["text"], cfg.GREY if repealed else cfg.RED)
-        em.add_field(name="Issued by", value=f"<@{d['author']}>")
-        em.add_field(name="Date", value=stamp(d["created"], "D"))
+        em = embed(
+            f"📜 Decreto #{d['id']}: {d['title']}",
+            d["text"],
+            cfg.GREY if repealed else cfg.RED,
+        )
+        em.add_field(name="Emitido por · Issued by", value=f"<@{d['author']}>")
+        em.add_field(name="Fecha · Date", value=stamp(d["created"], "D"))
         if repealed:
-            em.add_field(name="Status", value=f"❌ Repealed {stamp(d['repealed_at'], 'D')}", inline=False)
+            em.add_field(
+                name="Estado · Status",
+                value=f"❌ Derogado · Repealed {stamp(d['repealed_at'], 'D')}",
+                inline=False,
+            )
+        else:
+            em.add_field(name="Estado · Status", value="✅ Vigente · In force", inline=False)
         return em
 
     async def publish_decree(self, interaction: discord.Interaction, title: str, text: str) -> None:
@@ -134,7 +144,11 @@ class Government(commands.Cog):
             link = f"https://discord.com/channels/{interaction.guild_id}/{d['channel']}/{d['message']}"
             mark = "~~" if d["status"] == "repealed" else ""
             rows.append(f"`#{d['id']}` {mark}[{d['title']}]({link}){mark}")
-        await reply(interaction, embed=embed("📜 Decrees", "\n".join(rows) or "No decrees yet.", cfg.RED))
+        await reply(interaction, embed=embed(
+            "📜 Decretos · Decrees",
+            "\n".join(rows) or "Ningún decreto aún · No decrees yet.",
+            cfg.RED,
+        ))
 
     # ── polls ─────────────────────────────────────────────────────────────────
     def poll_embed(self, p: dict) -> discord.Embed:
@@ -142,16 +156,30 @@ class Government(commands.Cog):
         top = set(polls.winners(p)) if p["status"] != "open" else set()
         blocks = []
         for i, (option, n) in enumerate(zip(p["options"], counts)):
-            crown = " 🏆" if i in top and len(top) == 1 else ""
-            blocks.append(f"**{i + 1}. {option}**{crown}\n`{bar(n, max(total, 1), 14)}` {n} ({(n / total if total else 0):.0%})")
-        em = embed(f"📊 {p['question']}", "\n\n".join(blocks), cfg.GOLD if p["status"] == "open" else cfg.GREY)
-        if p["status"] == "open":
-            em.add_field(name="Closes", value=stamp(p["closes"]))
+            crown = " 🏆" if i in top and len(top) == 1 else (" 🤝" if i in top else "")
+            pct = f"{(n / total if total else 0):.0%}"
+            blocks.append(f"**{i + 1}. {option}**{crown}\n`{bar(n, max(total, 1), 14)}` **{n}** ({pct})")
+        open_ = p["status"] == "open"
+        em = embed(
+            f"📊 Encuesta · {p['question']}",
+            "\n\n".join(blocks) or "*Sin opciones*",
+            cfg.GOLD if open_ else cfg.GREY,
+        )
+        if open_:
+            em.add_field(name="Cierra · Closes", value=stamp(p["closes"]))
+            em.add_field(name="Estado", value="🟢 Abierta · Open")
         else:
-            result = "Tie" if len(top) > 1 else ("No votes" if not top else "Closed")
-            em.add_field(name="Status", value=f"🔒 {result}")
-        em.add_field(name="Votes cast", value=str(total))
-        em.set_footer(text=f"Poll #{p['id']} · one vote each, changeable until close · votes are recorded by member, not secret")
+            if len(top) > 1:
+                result = "🤝 Empate · Tie"
+            elif not top:
+                result = "Sin votos · No votes"
+            else:
+                result = "🔒 Cerrada · Closed"
+            em.add_field(name="Estado · Status", value=result)
+        em.add_field(name="Votos · Votes cast", value=f"**{total}**")
+        em.set_footer(
+            text=f"Poll #{p['id']} · un voto por persona, cambiable · one vote each, changeable · not a secret ballot"
+        )
         return em
 
     async def create_poll(self, interaction: discord.Interaction, question: str, raw: str, hours_text: str) -> None:

@@ -5,7 +5,8 @@ Design rules (each one fixes a problem in the old bot):
     lower than the last one is a bad scrape and is rejected, never accepted.
   * a huge jump is held until a second scrape confirms it, instead of corrupting the baseline.
   * a failed site keeps its last known number but is reported as stale, never as fresh.
-  * a cycle only starts once every site has been read at least once.
+  * a cycle starts once a majority of sites have been read at least once (so one dead
+    site cannot freeze the whole tracker forever).
 """
 
 from __future__ import annotations
@@ -62,10 +63,19 @@ class VoteEngine:
         self.goal, self.ping_threshold = goal, ping_threshold
         self.state["goal"] = goal
 
+    def _majority(self) -> int:
+        """How many sites must have data before the tracker can start."""
+        return max(1, len(self.sites) // 2 + 1)
+
+    def _sites_with_data(self) -> list[str]:
+        return [s for s in self.sites if s in self.state["counts"]]
+
     # ── derived values ────────────────────────────────────────────────────────
     @property
     def ready(self) -> bool:
-        return self.state["baseline"] is not None and all(s in self.state["counts"] for s in self.sites)
+        if self.state["baseline"] is None:
+            return False
+        return len(self._sites_with_data()) >= self._majority()
 
     @property
     def total(self) -> int:
@@ -122,10 +132,13 @@ class VoteEngine:
             self.state["last_ok"][site] = now
             result.accepted.append(site)
 
-        if self.state["baseline"] is None and all(s in counts for s in self.sites):
+        # Start as soon as a majority of sites have data (one chronically dead site
+        # must not freeze the whole vote party forever).
+        if self.state["baseline"] is None and len(self._sites_with_data()) >= self._majority():
             self.state["baseline"] = self.total
             self.state["cycle_started"] = now
-            log.info("first full reading: baseline set to %s", self.total)
+            log.info("baseline set to %s from %s/%s sites", self.total,
+                     len(self._sites_with_data()), len(self.sites))
 
         if self.ready:
             if self.total < self.state["baseline"]:  # only possible after a manual mistake
@@ -149,8 +162,8 @@ class VoteEngine:
 
     # ── admin tools ───────────────────────────────────────────────────────────
     def set_remaining(self, remaining: int, now: float) -> bool:
-        """Make the tracker show `remaining` votes to go. Needs every site read at least once."""
-        if not all(s in self.state["counts"] for s in self.sites):
+        """Make the tracker show `remaining` votes to go. Needs a majority of sites read."""
+        if len(self._sites_with_data()) < self._majority():
             return False
         remaining = min(max(remaining, 0), self.goal)
         self.state["baseline"] = self.total - (self.goal - remaining)

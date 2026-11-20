@@ -47,6 +47,16 @@ FACTS = [
      "es": "El 20 de octubre es el Día de la Cultura Cubana, en recuerdo de la primera interpretación pública de *La Bayamesa* en 1868."},
     {"en": "Cuban Spanish often softens the *s* at the end of a syllable, so it can sound like the letter is missing.",
      "es": "En el español de Cuba la *s* al final de la sílaba suele suavizarse, y a veces parece que desaparece."},
+    {"en": "José Martí is Cuba's national hero — poet, journalist and independence leader. His birthday, January 28, is widely commemorated.",
+     "es": "José Martí es el héroe nacional de Cuba: poeta, periodista y líder independentista. Su cumpleaños, el 28 de enero, se conmemora en todo el país."},
+    {"en": "The Cuban sandwich — roast pork, ham, Swiss cheese, pickles and mustard on Cuban bread — was popularized by Cuban communities in Florida.",
+     "es": "El sandwich cubano — cerdo asado, jamón, queso suizo, pepinillos y mostaza en pan cubano — se popularizó en las comunidades cubanas de Florida."},
+    {"en": "Dominoes (*dominó*) is a social institution in Cuba: parks and corners fill with tables, arguments and laughter.",
+     "es": "El dominó es una institución social en Cuba: parques y esquinas se llenan de mesas, discusiones y risas."},
+    {"en": "The *guayabera* is the classic Cuban shirt — light, pleated, and worn untucked in the heat.",
+     "es": "La guayabera es la camisa clásica cubana: ligera, con alforzas, y se usa por fuera en el calor."},
+    {"en": "Santiago de Cuba, in the east, is often called the cradle of Cuban independence and of son music.",
+     "es": "Santiago de Cuba, en el oriente, se considera cuna de la independencia cubana y del son."},
 ]
 
 SLANG = [
@@ -68,6 +78,14 @@ SLANG = [
     {"term": "pinchar", "en": "To work (as in having a job).", "es": "Trabajar.", "example": "Tengo que pinchar hasta tarde hoy."},
     {"term": "candela", "en": "Literally fire; also used when things are intense or tough.",
      "es": "Literalmente fuego; también se usa cuando algo está intenso o difícil.", "example": "Esa votación estuvo candela."},
+    {"term": "compa", "en": "Short for *compadre* — friend, mate.", "es": "Abreviatura de *compadre*: amigo, compañero.",
+     "example": "Oye, compa, ¿vienes al vote party?"},
+    {"term": "fula", "en": "Dollar / hard currency (colloquial).", "es": "Dólar o divisa (coloquial).", "example": "Eso cuesta una pila de fula."},
+    {"term": "resolver", "en": "To figure it out / make it work, often with limited resources.",
+     "es": "Arreglárselas, conseguir lo necesario con lo que hay.", "example": "No hay material, pero vamos a resolver."},
+    {"term": "¿Qué volá?", "en": "Variant of *¿Qué bolá?* — \"What's up?\"", "es": "Variante de *¿Qué bolá?*: \"¿Qué tal?\"",
+     "example": "¿Qué volá, asere?"},
+    {"term": "tremendo", "en": "Awesome, huge, impressive.", "es": "Impresionante, enorme, genial.", "example": "¡Tremendo el edificio que construyeron!"},
 ]
 
 DISHES = [

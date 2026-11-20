@@ -21,13 +21,14 @@ from votes.scraper import VoteScraper
 
 log = logging.getLogger("castro.votes")
 
+# Colors lean on the Cuban bandera (blue / red) plus gold and green for momentum & party.
 PHASES = {
-    WAITING: (cfg.GREY, "⏳ Waiting for data"),
-    NORMAL: (cfg.BLUE, "🗳️ Votes are coming in"),
-    MOMENTUM: (cfg.GOLD, "🔥 Over halfway there"),
-    CLOSE: (cfg.RED, "🚨 Vote party is close"),
-    FINAL: (cfg.RED, "🏁 Final stretch"),
-    CELEBRATION: (cfg.GREEN, "🎉 Vote party time"),
+    WAITING: (cfg.GREY, "⏳ Esperando datos · Waiting for site data"),
+    NORMAL: (cfg.BLUE, "🗳️ Los votos van llegando · Votes are coming in"),
+    MOMENTUM: (cfg.GOLD, "🔥 ¡Más de la mitad! · Over halfway there"),
+    CLOSE: (cfg.RED, "🚨 ¡Ya casi, compañeros! · Vote party is close"),
+    FINAL: (0x9B0D1F, "🏁 Recta final · Final stretch — every vote counts"),  # deeper bandera red
+    CELEBRATION: (cfg.GREEN, "🎉 ¡Fiesta! Vote party time · ¡Viva Cuba!"),
 }
 IGN_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 
@@ -53,8 +54,10 @@ class VoteView(discord.ui.View):
     @discord.ui.button(label="How to vote", emoji="📖", style=discord.ButtonStyle.secondary, custom_id="castro:vote:howto")
     async def howto(self, interaction: discord.Interaction, button: discord.ui.Button):
         lines = [f"{s['emoji']} [{s['name']}]({s['vote_url']})" for s in cfg.VOTE_SITES]
-        em = embed("How to vote", "Vote once on each site (every site allows one vote per day), "
-                   "then press **I voted** on the tracker.\n\n" + "\n".join(lines))
+        lang = interaction.client.lang(interaction.user.id, interaction.guild_id)
+        from core.i18n import t
+        body = t("howto_vote", lang) + "\n\n" + "\n".join(lines)
+        em = embed("📖 Cómo votar · How to vote", body)
         await reply(interaction, embed=em)
 
     @discord.ui.button(label="Remind me", emoji="⏰", style=discord.ButtonStyle.secondary, custom_id="castro:vote:remind")
@@ -169,26 +172,61 @@ class Votes(commands.Cog):
         e, now = self.engine, time.time()
         phase = e.phase(now)
         color, headline = PHASES[phase]
-        em = embed(f"{ident(self.guild_id).flag} Vote Party", color=color)
+        i = ident(self.guild_id)
+        # Prefer the server's Cuban theme accent when in calm phases so the tracker matches the nation look.
+        if phase in (NORMAL, WAITING):
+            color = i.primary or color
+        em = embed(f"{i.flag} Vote Party · {i.name}", color=color)
+        if i.motto:
+            em.set_author(name=i.motto)
+
         if phase == WAITING:
-            em.description = (f"{headline}\nWaiting for a first reading from every vote site. "
-                              "Admins: `/voteparty status` shows what's failing.")
+            have = len(self.engine._sites_with_data())
+            need = self.engine._majority()
+            em.description = (
+                f"**{headline}**\n"
+                f"Sites ready: **{have}/{need}** needed to start the cycle.\n"
+                f"Admins: `/voteparty status` shows what's failing."
+            )
         else:
-            lead = "🎉 **Vote party time!** Log in to collect.\n" if phase == CELEBRATION else ""
-            em.description = (f"{lead}{headline}\n`{bar(e.progress, e.goal)}`\n"
-                              f"**{e.progress}/{e.goal}** votes · **{e.remaining}** to go")
+            pct = int(100 * e.progress / max(e.goal, 1))
+            lead = ""
+            if phase == CELEBRATION:
+                lead = "🎉 **¡Fiesta! Vote party time.** Log in to collect your rewards.\n\n"
+            em.description = (
+                f"{lead}**{headline}**\n"
+                f"`{bar(e.progress, e.goal)}` **{pct}%**\n"
+                f"**{e.progress:,}** / **{e.goal:,}** votes · **{e.remaining:,}** to go"
+            )
+
         stale = set(e.stale_sites(now))
         lines = []
         for site in cfg.VOTE_SITES:
             count = e.state["counts"].get(site["name"])
-            shown = f"{count:,}" if count is not None else "—"
+            shown = f"**{count:,}**" if count is not None else "*—*"
             warn = " ⚠️" if site["name"] in stale else ""
-            lines.append(f"{site['emoji']} [{site['name']}]({site['vote_url']}) — {shown}{warn}")
-        em.add_field(name="Vote here (all-time totals)", value="\n".join(lines), inline=False)
+            mark = "✅" if count is not None and site["name"] not in stale else ("⚠️" if site["name"] in stale else "⏳")
+            lines.append(f"{mark} {site['emoji']} [{site['name']}]({site['vote_url']}) — {shown}{warn}")
+        em.add_field(name="🇨🇺 Vota aquí · Vote here", value="\n".join(lines), inline=False)
+
         if stale and phase != WAITING:
-            em.add_field(name="⚠️ Heads up", value="Some sites haven't responded recently, so the count may be behind.", inline=False)
+            em.add_field(
+                name="⚠️ Atención · Heads up",
+                value="Some sites haven't responded recently — the total may be a little behind.",
+                inline=False,
+            )
+
         em.add_field(name="Last checked", value=stamp(e.state["checked"]), inline=True)
-        em.set_footer(text=f"Cycle #{e.state['cycle']} · up to {self.opt('claims_per_cycle')} claims per player per cycle")
+        em.add_field(name="Cycle", value=f"**#{e.state['cycle']}**", inline=True)
+        em.add_field(
+            name="Claims / player",
+            value=f"**{self.opt('claims_per_cycle')}** this cycle",
+            inline=True,
+        )
+        foot = f"{i.name} · bandera blue & red · up to {self.opt('claims_per_cycle')} claims per player"
+        if i.motto:
+            foot = f"{i.motto} · {foot}"
+        em.set_footer(text=foot[:2048])
         return em
 
     async def _tracker_channel(self):
@@ -358,7 +396,7 @@ class Votes(commands.Cog):
     @admin_only()
     async def vp_remaining(self, interaction: discord.Interaction, votes: app_commands.Range[int, 0, 10000]):
         if not self.engine.set_remaining(votes, time.time()):
-            return await reply(interaction, "❌ Can't do that yet: not every site has been read once. Try `/voteparty forceupdate`.")
+            return await reply(interaction, "❌ Can't do that yet: not enough sites have been read. Try `/voteparty forceupdate`.")
         self.bot.store.save("votes")
         await self.update_tracker()
         await reply(interaction, f"✅ Tracker now shows **{self.engine.remaining}** votes remaining.")
@@ -367,7 +405,7 @@ class Votes(commands.Cog):
     @admin_only()
     async def vp_rebase(self, interaction: discord.Interaction):
         if not self.engine.rebase(time.time()):
-            return await reply(interaction, "❌ Not every site has been read once yet.")
+            return await reply(interaction, "❌ Not enough sites have been read yet. Try `/voteparty forceupdate`.")
         self.bot.store.save("votes")
         await self.update_tracker()
         await reply(interaction, "✅ New cycle started from the current totals.")
@@ -377,13 +415,19 @@ class Votes(commands.Cog):
     async def vp_status(self, interaction: discord.Interaction):
         now = time.time()
         em = embed("🩺 Vote scraper health", color=cfg.BLUE)
+        have = len(self.engine._sites_with_data())
+        need = self.engine._majority()
+        if not self.engine.ready:
+            em.description = f"Tracker is **waiting** ({have}/{need} sites with data). It will start automatically once enough sites respond."
         for site in cfg.VOTE_SITES:
             h = self.scraper.health[site["name"]]
             total = h.ok + h.fail
             rate = f"{h.ok / total:.0%}" if total else "n/a"
-            lines = [f"Success rate: **{rate}** ({h.ok}/{total})", f"Last good read: {stamp(h.last_ok)}"]
+            has_data = site["name"] in self.engine.state["counts"]
+            status = "✅ has data" if has_data else "⏳ no data yet"
+            lines = [f"{status} · Success rate: **{rate}** ({h.ok}/{total})", f"Last good read: {stamp(h.last_ok)}"]
             if h.consecutive_fail:
-                lines.append(f"⚠️ {h.consecutive_fail} failures in a row: {h.last_error}")
+                lines.append(f"⚠️ {h.consecutive_fail} failures in a row: `{h.last_error}`")
             em.add_field(name=f"{site['emoji']} {site['name']}", value="\n".join(lines), inline=False)
         em.set_footer(text=f"Polling every {self.poll.seconds:.0f}s ({self.opt('poll_interval')}s normally, {self.opt('fast_interval')}s when close) · stale after {cfg.STALE_AFTER // 60} min")
         await reply(interaction, embed=em)

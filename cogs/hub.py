@@ -13,26 +13,30 @@ from core.ui import embed, ident, reply
 
 def help_embed(guild_id: int | None = None) -> discord.Embed:
     i = ident(guild_id)
-    em = embed(f"{i.flag} Castro — Command Guide", color=i.primary)
+    em = embed(f"{i.flag} Castro — Guía de comandos", color=i.primary)
     em.description = (
-        f"Tools for **{i.name}**. Most replies are private so the chat stays clean.\n\n"
-        "**For everyone**\n"
+        f"Herramientas para **{i.name}**. Most replies are private so chat stays clean.\n\n"
+        "**Para todos · Everyone**\n"
         "• `/help` — this guide\n"
         "• `/nation` — directory, towns, government, relations\n"
-        "• `/quote today` — today's Quote of the Day\n"
-        "• `/cuba` — facts, slang, food and music (`fact` `slang` `dish` `music` `word`)\n"
+        "• `/quote today` — quote of the day\n"
+        "• `/cuba` — facts, slang, food, music, palabra del día\n"
         "• `/profile` `/roster` `/decree list` `/poll results` `/treaty list`\n"
+        "• `/language` — English or Español\n"
         "• Music: `/play` `/skip` `/queue` `/nowplaying` `/stop` `/pause` `/resume`\n\n"
-        "**Citizenship & support**\n"
+        "**Ciudadanía y apoyo · Citizenship & support**\n"
         "• Request citizenship or open a ticket from the panels / welcome buttons\n\n"
-        "**Leadership**\n"
+        "**Liderazgo · Leadership**\n"
         "• `/decree` `/poll` `/treaty` `/nation edit` and more\n\n"
         "**Staff / Admin**\n"
         "• `/quote add|remove|list|post`\n"
         "• `/castro settings` — change almost everything from one panel\n"
         "• `/castro setchannel` `/castro setrole` `/castro panel` `/castro status` `/castro preview`"
     )
-    em.set_footer(text=f"Castro v{cfg.VERSION} · {i.name}")
+    if i.motto:
+        em.set_footer(text=f"{i.motto} · Castro v{cfg.VERSION}")
+    else:
+        em.set_footer(text=f"Castro v{cfg.VERSION} · {i.name}")
     return em
 
 
@@ -77,10 +81,16 @@ class WelcomeView(discord.ui.View):
     @discord.ui.button(label="Foreign Affairs", emoji="🕊️", style=discord.ButtonStyle.secondary,
                        custom_id="castro:welcome:diplomacy")
     async def diplomacy(self, interaction: discord.Interaction, button: discord.ui.Button):
+        i = ident(interaction.guild_id)
         await reply(
             interaction,
-            "Diplomats: please open a ticket or contact leadership in the **Foreign Affairs** channel. "
-            "You can also use the Nation Support panel.",
+            embed=embed(
+                f"{i.flag} Foreign Affairs · Asuntos Exteriores",
+                "Diplomats: open a **ticket** or contact leadership in the Foreign Affairs channel.\n"
+                "Also use the Nation Support panel.\n\n"
+                "Diplomáticos: abran un **ticket** o contacten al liderazgo en el canal de Asuntos Exteriores.",
+                i.primary,
+            ),
         )
 
 
@@ -112,9 +122,15 @@ class Hub(commands.Cog):
 
     async def post_panel(self, channel: discord.abc.Messageable) -> None:
         i = ident(getattr(getattr(channel, "guild", None), "id", None))
+        desc = (
+            f"Centro de comandos de **{i.name}**.\n"
+            "Use `/help` for tools, citizenship, culture and more.\n"
+            "Results are private by default so the chat stays clean."
+        )
+        if i.motto:
+            desc = f"*{i.motto}*\n\n{desc}"
         await channel.send(
-            embed=embed(f"{i.flag} Castro command hub",
-                        "Use `/help` for tools, citizenship and more. Results are private by default.", i.primary),
+            embed=embed(f"{i.flag} Castro — Command Hub", desc, i.primary),
             view=HubView(),
         )
 

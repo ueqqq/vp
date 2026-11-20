@@ -115,7 +115,7 @@ class Nation(commands.Cog):
         em.add_field(name="Bank", value=d["bank"] or "—", inline=True)
         em.add_field(name="Claimed chunks", value=d["chunks"] or "—", inline=True)
         em.add_field(name="Last updated", value=stamp(d["updated"]), inline=False)
-        em.set_footer(text="Maintained by leadership · not live game data · use the buttons below")
+        em.set_footer(text="Mantenido por el liderazgo · not live game data · use the buttons below")
         return em
 
     def towns_embed(self, guild_id: int | None = None) -> discord.Embed:

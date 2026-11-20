@@ -75,7 +75,7 @@ YouTube may break their terms of service and music bots tend to be shut down, so
 * A huge single jump must be seen twice before it's trusted.
 * A site that stops responding keeps its last number but is shown with ⚠️ and a data warning.
 * Polling is every 30 s, dropping to 15 s once the party is within the ping threshold (both configurable in `.env`).
-* The first cycle starts only after every site has been read once. Use `/voteparty setremaining`
+* The first cycle starts once a **majority** of sites have been read (so one dead site cannot freeze the tracker). Use `/voteparty setremaining`
   to match the real count if you're starting mid-cycle.
 * "I voted" is **self-reported** (3 per cycle, 1 hour apart). The bot can't verify who voted, and the leaderboard says so.
 

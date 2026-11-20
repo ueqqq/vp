@@ -62,17 +62,23 @@ class Citizens(commands.Cog):
         rec = self.bot.store.data("players", {}).get(str(member.id), {})
         is_citizen = self.bot.settings.has_role(member, "citizen")
         i = ident(interaction.guild_id)
-        em = embed(f"{i.flag} {member.display_name}", rec.get("bio") or None, i.primary)
+        bio = rec.get("bio") or ("*Sin bio aún · No bio set yet.*" if not is_citizen else None)
+        em = embed(f"{i.flag} {member.display_name}", bio, i.primary)
         em.set_thumbnail(url=member.display_avatar.url)
-        em.add_field(name="Minecraft name", value=f"`{rec['ign']}`" if rec.get("ign") else "not linked")
-        em.add_field(name="Town", value=rec.get("town") or "—")
-        status = "Citizen" if is_citizen else "Not a citizen"
-        if rec.get("citizen_since"):
-            status += f" since {stamp(rec['citizen_since'], 'D')}"
+        em.add_field(name="Minecraft", value=f"`{rec['ign']}`" if rec.get("ign") else "not linked · `/link`")
+        em.add_field(name="Town · Pueblo", value=rec.get("town") or "—")
+        if is_citizen:
+            status = "🇨🇺 Ciudadano · Citizen"
+            if rec.get("citizen_since"):
+                status += f"\nsince {stamp(rec['citizen_since'], 'D')}"
+        else:
+            status = "Visitor · visitante"
         em.add_field(name="Status", value=status)
-        em.add_field(name="Vote claims", value=str(rec.get("claims_total", 0)))
+        claims = rec.get("claims_total", 0)
+        em.add_field(name="Vote claims", value=f"**{claims}**" + (" · ¡buen trabajo!" if claims >= 10 else ""))
         if member.joined_at:
             em.add_field(name="In the server since", value=stamp(member.joined_at.timestamp(), "D"))
+        em.set_footer(text=f"{i.name}" + (f" · {i.motto}" if i.motto else ""))
         await reply(interaction, embed=em)
 
     @profile.command(name="edit", description="Set your own town and bio")

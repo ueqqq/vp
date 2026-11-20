@@ -22,7 +22,7 @@ def _int(name: str, default: int, minimum: int | None = None) -> int:
 
 
 BOT_NAME = "Castro"
-VERSION = "2.4.0"  # bump when slash commands change; triggers a one-time re-sync
+VERSION = "2.5.1"  # bump when slash commands change; triggers a one-time re-sync
 NATION_NAME = "Cuba"
 NATION_FLAG = "🇨🇺"
 

@@ -13,15 +13,22 @@ def make(goal=250, threshold=30, **kw):
 
 
 class EngineTests(unittest.TestCase):
-    def test_waits_until_every_site_read(self):
+    def test_waits_until_majority_of_sites_read(self):
         e = make()
-        e.apply({"A": 100, "B": 200, "C": None}, 1)
+        # Only one site → still waiting (majority of 3 is 2)
+        e.apply({"A": 100, "B": None, "C": None}, 1)
         self.assertFalse(e.ready)
         self.assertEqual(e.phase(1), WAITING)
-        e.apply({"A": 100, "B": 200, "C": 300}, 2)
+        # Two sites → ready (majority)
+        e.apply({"A": 100, "B": 200, "C": None}, 2)
         self.assertTrue(e.ready)
         self.assertEqual(e.progress, 0)
         self.assertEqual(e.remaining, 250)
+        # Third site arriving later is accepted; large jump may complete a cycle
+        r = e.apply({"A": 100, "B": 200, "C": 50}, 3)
+        self.assertTrue(e.ready)
+        self.assertEqual(e.progress, 50)  # new site contributes 50 above the original baseline
+        self.assertFalse(r.completed)
 
     def test_progress_and_phases(self):
         e = make()

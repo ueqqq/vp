@@ -36,25 +36,28 @@ GROUPS = {
 }
 
 DEFAULT_WELCOME = (
-    "Welcome to {nation}, **{name}**!\n\n"
-    "Comrade, you have reached our shores. Whether you come to build a home, "
-    "stand alongside our people, or speak on behalf of another nation, there is a place for you here.\n\n"
-    "A nation is built by its people — and every great undertaking begins with someone willing to lay the first block.\n\n"
-    "Read our rules, meet the community, and request citizenship if you wish to call {nation} home.\n"
-    "Diplomats, our Foreign Affairs office awaits you.\n\n"
-    "**¡Bienvenido a {nation}!** — Castro"
+    "¡Bienvenido a {nation}, **{name}**! {flag}\n\n"
+    "You have reached our shores, comrade. Whether you come to build a home, "
+    "stand with the people, or speak for another nation — there is a place for you here.\n\n"
+    "A nation is built by its people. Every great work begins with someone willing to lay the first block.\n\n"
+    "Read the rules, meet the community, and request citizenship if you wish to call {nation} home.\n"
+    "Diplomats: the Foreign Affairs office awaits you.\n\n"
+    "**¡Patria o muerte, venceremos!** — Castro"
 )
 DEFAULT_SUPPORT = (
-    "Need help from leadership or staff?\n"
-    "Open a **private ticket** and we will get back to you.\n\n"
-    "Want to serve the nation?\n"
-    "**Apply for government** — applications are reviewed privately."
+    "¿Necesitas ayuda de liderazgo o staff?\n"
+    "Abre un **ticket privado** y te respondemos.\n\n"
+    "¿Quieres servir a la nación?\n"
+    "**Solicita un cargo de gobierno** — las solicitudes se revisan en privado.\n\n"
+    "Need help? Open a private ticket. Want to serve? Apply for government."
 )
 DEFAULT_PRESENCE = (
     "watching: over {nation} {flag}\n"
     "listening: son cubano 🎶\n"
-    "playing: dominó\n"
-    "watching: el cafecito ☕"
+    "playing: dominó en la esquina\n"
+    "watching: el cafecito ☕\n"
+    "listening: Buena Vista Social Club\n"
+    "playing: a hand of baraja"
 )
 
 
@@ -82,7 +85,7 @@ SETTINGS: list[Setting] = [
     # identity
     Setting("nation_name", "identity", "Nation name", "text", cfg.NATION_NAME, "Used in titles, footers and messages.", max_len=40),
     Setting("nation_flag", "identity", "Flag emoji", "text", cfg.NATION_FLAG, "Shown beside the nation name.", max_len=12),
-    Setting("motto", "identity", "Motto", "text", "", "Optional line shown on the nation directory.", max_len=100, allow_empty=True),
+    Setting("motto", "identity", "Motto", "text", "¡Patria o muerte, venceremos!", "Optional line shown on the nation directory.", max_len=100, allow_empty=True),
     Setting("theme", "identity", "Color theme", "choice", "bandera", "bandera (flag blue), roja (red), palma (green), dorada (gold).", choices=tuple(THEMES)),
     Setting("accent_color", "identity", "Custom main color", "color", "", "Hex like #002A8F. Leave empty to use the theme.", allow_empty=True),
     Setting("default_language", "identity", "Default language", "choice", "en", "For people who haven't picked one with /language.", choices=("en", "es")),
@@ -95,10 +98,10 @@ SETTINGS: list[Setting] = [
     Setting("claim_cooldown_min", "votes", "Minutes between claims", "int", cfg.CLAIM_COOLDOWN // 60, "Minimum gap between one player's claims.", min=1, max=720),
     Setting("ping_delete_minutes", "votes", "Delete pings after (min)", "int", cfg.PING_DELETE_SECONDS // 60, "Vote-party pings clean themselves up.", min=1, max=120),
     Setting("ping_message", "votes", "Ping message", "template",
-            "{role} 🚨 ¡Ya casi! The vote party is close: only **{remaining}** votes to go!",
+            "{role} 🚨 ¡Ya casi, compañeros! The vote party is close: only **{remaining}** votes to go. ¡A votar!",
             "Placeholders: {role} {remaining} {nation} {flag}", max_len=300, placeholders=("role", "remaining", "nation", "flag")),
     Setting("celebration_message", "votes", "Party message", "template",
-            "🎉 {flag} **¡Fiesta! Vote party time!** Thank you to everyone who voted.",
+            "🎉 {flag} **¡Fiesta! Vote party time!** Gracias a todos los que votaron. ¡Viva {nation}!",
             "Placeholders: {nation} {flag}", max_len=300, placeholders=("nation", "flag")),
     # welcome & support
     Setting("welcome_title", "welcome", "Welcome title", "template", "{flag} ¡Bienvenido a {nation}!",
